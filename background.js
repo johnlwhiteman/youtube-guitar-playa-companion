@@ -33,7 +33,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   } catch (e) {
     try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["page-bridge.js"], world: "MAIN" });
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["notes-lib.js", "content.js"] });
       await openIn(tab.id);
     } catch (err) {
       console.warn("Guitar Playa Companion: could not open in this tab", err);

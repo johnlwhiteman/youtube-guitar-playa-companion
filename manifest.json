@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "YouTube Guitar Playa Companion",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Loop the hard parts, slow them down without changing pitch, and lock in with a metronome. Learn songs on YouTube at your pace.",
   "permissions": [
     "storage",
-    "scripting"
+    "scripting",
+    "unlimitedStorage"
   ],
   "background": {
     "service_worker": "background.js"
@@ -45,6 +46,7 @@
         "https://music.youtube.com/*"
       ],
       "js": [
+        "notes-lib.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -59,7 +61,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "help/*.png"
+        "help/*.png",
+        "fonts/*.woff2"
       ],
       "matches": [
         "https://www.youtube.com/*",

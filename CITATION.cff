@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+title: "YouTube Guitar Playa Companion"
+abstract: >-
+  A Chrome extension for learning songs on YouTube: A/B looping,
+  pitch-preserving speed control from 25% to 500%, a speed trainer,
+  a metronome with automatic BPM detection, saved videos and loops,
+  a Markdown editor for practice notes with a built-in guitar tab editor, and a
+  scale library for guitar and bass with a circle of fifths and
+  CAGED chord shapes, and a song editor with editable chord shapes.
+authors:
+  - given-names: John L.
+    family-names: Whiteman
+repository-code: "https://github.com/johnlwhiteman/guitar-playa-youtube-companion"
+url: "https://github.com/johnlwhiteman/guitar-playa-youtube-companion"
+license: MIT
+version: 1.1.0
+date-released: "2026-11-25"
+keywords:
+  - chrome-extension
+  - youtube
+  - guitar
+  - music-practice
+  - looper
+  - metronome
+  - tablature
+  - scales
+  - circle-of-fifths
+  - caged
+  - chord-sheets
+  - markdown

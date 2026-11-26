@@ -117,6 +117,25 @@
         unlockAll();
         tellPlayer(1);
       }
+    } else if (d.type === "caption-tracks") {
+      // the video's caption tracks (only the page can see them), and any caption address the
+      // player already used (it carries the token YouTube may ask for)
+      let tracks = [], seen = [];
+      try {
+        const p = document.getElementById("movie_player");
+        let pr = p && p.getPlayerResponse ? p.getPlayerResponse() : null;
+        const ini = window.ytInitialPlayerResponse;
+        if ((!pr || (pr.videoDetails && pr.videoDetails.videoId !== d.videoId)) && ini && ini.videoDetails && ini.videoDetails.videoId === d.videoId) pr = ini;
+        if (pr && pr.videoDetails && pr.videoDetails.videoId === d.videoId) {
+          const list = (pr.captions && pr.captions.playerCaptionsTracklistRenderer && pr.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
+          tracks = list.map((t) => ({ baseUrl: t.baseUrl, languageCode: t.languageCode, kind: t.kind || "", name: (t.name && (t.name.simpleText || (t.name.runs || []).map((r) => r.text).join(""))) || "" }));
+        }
+        seen = performance
+          .getEntriesByType("resource")
+          .map((e) => e.name)
+          .filter((u) => u.includes("/api/timedtext") && u.includes("v=" + d.videoId));
+      } catch (e) {}
+      post({ type: "caption-tracks", id: d.id, tracks, seen });
     } else if (d.type === "ping") {
       post({ type: "pong" });
     } else if (d.type === "teardown") {
