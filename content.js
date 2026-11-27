@@ -32,6 +32,7 @@
       pos: null, // {left, top}
     },
   };
+  const DEFAULT_SETTINGS = JSON.parse(JSON.stringify(state.settings)); // for Reset to Default
   let dead = false; // set when the extension is removed, disabled or reloaded
   let enforceSpeedUntil = 0;
 
@@ -108,13 +109,19 @@
         return chrome.storage.local.set({ [k]: v });
       } catch (e) {}
     },
+    remove: (k) => {
+      try {
+        return chrome.storage.local.remove(k);
+      } catch (e) {}
+    },
   };
   let saveTimer = null;
   function persist() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       store.set("settings", state.settings);
-      if (state.videoId) {
+      // where you were in a video (A, B, speed) is only kept once the video is saved
+      if (state.videoId && typeof videoEntry === "function" && videoEntry()) {
         store.set("video:" + state.videoId, {
           saved: state.saved,
           last: { a: state.a, b: state.b, speed: state.speed },
@@ -221,7 +228,6 @@
     if (Math.abs(next - cur) < 0.001) return;
     setSpeed(next, true);
     const reached = Math.abs(state.speed - lim) < 0.001;
-    flash(reached ? `Speed ${fmtSpeed(state.speed)}: limit reached` : `Speed ${fmtSpeed(state.speed)}`);
   }
   function checkLoop() {
     if (dead) return;
@@ -316,6 +322,9 @@
   // ---------- UI ----------
   // Notes toolbar icons: one family of thin line icons on a 24×24 grid (same style as Lutefisk Book Editor).
   const NOTE_ICONS = {
+    spark: "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z",
+    mic: "M9.5 2.5h5v11a2.5 2.5 0 0 1-5 0zM5.2 11.2a6.8 6.8 0 0 0 13.6 0M12 18v4M8.6 22h6.8",
+    key: "M2.6 12a4.6 4.6 0 1 0 9.2 0a4.6 4.6 0 1 0-9.2 0M11.8 12H22M18.6 12v4M21.8 12v3.2",
     undo: "M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
     caseUp: "M2 18L6.5 6 11 18M3.7 14h5.6M13 18l4.5-12L22 18M14.7 14h5.6",
     caseLow: "M7.5 11.2a3.4 3.4 0 1 0 0 6.8a3.4 3.4 0 0 0 0-6.8M10.9 10.5V18M17.5 11.2a3.4 3.4 0 1 0 0 6.8a3.4 3.4 0 0 0 0-6.8M20.9 10.5V18",
@@ -543,10 +552,18 @@
     .divider { border-top:1px solid var(--line); }
     .trrow { padding-left:22px; }
     input[type=text].trin { width:58px; text-align:center; font-weight:600; }
-    .metro-sec summary { cursor:pointer; user-select:none; list-style:none; display:flex; align-items:center; gap:6px; font-weight:600; color:var(--strong); }
+    .metro-sec summary { cursor:pointer; user-select:none; list-style:none; display:flex; align-items:center; gap:8px; font-weight:600; color:var(--strong);
+      margin:-4px -6px; padding:4px 6px; border-radius:8px; transition:background .15s; }
+    .metro-sec summary:hover { background:var(--btn-h); }
     .metro-sec summary::-webkit-details-marker { display:none; }
-    .metro-sec summary::before { content:"▸"; font-size:11px; color:var(--muted); width:10px; }
-    .metro-sec[open] summary::before { content:"▾"; }
+    /* the show/hide arrow: a clear button-like chevron that turns when the metronome opens */
+    .metro-sec summary .mchev { flex:none; display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%;
+      background:var(--accent); color:var(--accent-text); transition:transform .18s ease, filter .15s; }
+    .metro-sec summary:hover .mchev { filter:brightness(1.12); }
+    .metro-sec summary .mchev .hico { stroke-width:2.2; }
+    .metro-sec[open] summary .mchev { transform:rotate(90deg); }
+    .metro-sec summary .mhint { font-size:11px; font-weight:500; color:var(--muted); }
+    .metro-sec summary:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
     .metro-sec[open] > summary { margin-bottom:6px; }
     .metro-sec > .row { margin-top:6px; }
     button.small.bmk.on { background:var(--btn); border-color:var(--border); color:var(--accent); font-weight:400; }
@@ -563,6 +580,14 @@
     select:focus { outline:none; border-color:var(--accent); }
     .loopbar select { width:0; }
     #saveNew { font-weight:600; }
+    /* the video's own save button: a disk until it's saved, then a bin to delete it */
+    .vidsave { display:inline-flex; align-items:center; justify-content:center; gap:4px; height:28px; min-width:30px; padding:0 6px; flex:none; }
+    .vidsave .hico { stroke-width:1.5; }
+    .vidsave.unsaved { color:var(--accent); border-color:var(--accent); }
+    .vidsave.unsaved:hover { background:var(--accent); color:var(--accent-text); }
+    .vidsave.saved:hover { color:var(--red); border-color:var(--red); }
+    .vidsave.confirm, .vidsave.confirm:hover { background:var(--red); border-color:var(--red); color:#fff; }
+    .vidsave.confirm { font-weight:600; font-size:12px; }
     #aIn::placeholder, #bIn::placeholder { color:var(--muted); }
     .loopbar .lselbtn { width:0; min-width:0; display:flex; align-items:center; gap:4px; height:28px; padding:0 6px 0 8px; background:var(--input);
       border:1px solid var(--border); border-radius:6px; text-align:left; font-size:12.5px; color:var(--text); }
@@ -573,6 +598,8 @@
       border:1px solid var(--border); box-shadow:0 10px 30px var(--shadow); color:var(--text); font-size:12.5px; }
     .lp-row { display:flex; align-items:center; gap:6px; padding:3px 4px 3px 6px; border-radius:6px; cursor:pointer; }
     .lp-row:hover { background:var(--btn-h); }
+    .lp-row .lp-del.lp-ok { color:var(--accent); border-color:var(--accent); }
+    .lp-row .lp-del.lp-ok:hover { background:var(--accent); border-color:var(--accent); color:var(--accent-text); }
     .lp-row.sel { background:var(--info-bg); color:var(--info-text); }
     .lp-vid { font-weight:600; color:var(--strong); padding:6px; }
     .lp-name { flex:1; min-width:0; }
@@ -585,8 +612,8 @@
     .lp-del.lp-edit:hover { background:var(--btn-h); border-color:var(--border); color:var(--text); }
     .lp-del.confirm { width:auto; padding:0 8px; font-weight:600; }
     .lp-sep { border-top:1px solid var(--line); margin:4px 2px; }
-    .lp-io { display:flex; gap:6px; padding:2px 2px 1px; }
-    .lp-io button { flex:1; justify-content:center; gap:5px; }
+    .lp-ren { flex:1; min-width:0; background:var(--input); color:var(--text); border:1px solid var(--accent); border-radius:5px; padding:3px 6px; font:inherit; }
+    .lp-save { display:flex; align-items:center; justify-content:center; gap:5px; width:100%; margin-top:4px; height:28px; }
     /* manager: videos with loops */
     .vid { border:1px solid transparent; border-radius:8px; background:var(--item); }
     .vid.current { border-color:var(--accent); }
@@ -603,6 +630,16 @@
     .libbar input[type=search]:focus { outline:none; border-color:var(--accent); }
     .libsort { flex:none; height:28px; }
     .insgrp { position:relative; display:inline-flex; }
+    .mmenu { display:flex; flex-direction:column; gap:2px; padding:4px; min-width:130px; }
+    .mmenu button { text-align:left; border:none; background:transparent; padding:5px 10px; white-space:nowrap; }
+    .mmenu button:hover, .mmenu button:focus-visible { background:var(--btn-h); }
+    .chtext { margin:0; padding:6px 8px 4px; font:12.5px/1.25 var(--mono); color:var(--text); white-space:pre; }
+    .sctab { overflow-x:auto; }
+    .nk-name.tune { cursor:pointer; }
+    .nk-name.tune:hover { fill:var(--accent); }
+    .tunepop { display:grid; grid-template-columns:repeat(4, auto); gap:2px; padding:5px; }
+    .tunepop button { min-width:44px; height:24px; padding:0 6px; font:600 12px var(--mono); border-radius:5px; }
+    .tunepop button.on { border-color:var(--accent); color:var(--accent); }
     #scInsert .caret { font-size:10px; margin-left:2px; opacity:.85; }
     .insmenu { position:absolute; right:0; bottom:calc(100% + 6px); display:flex; flex-direction:column; min-width:100%; padding:4px; gap:2px; background:var(--bg); border:1px solid var(--border); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.35); z-index:5; }
     .insmenu[hidden] { display:none; }
@@ -686,7 +723,7 @@
     .ntools.mdtools { padding:3px 8px; }
     .ntools.mdtools .sctog { margin-right:6px; }
     .ntools .mdexp { height:26px; padding:0 8px; display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; }
-    .nfoot .mdexp { display:inline-flex; align-items:center; gap:4px; }
+    .modal-foot .mdexp { display:inline-flex; align-items:center; gap:4px; }
     .ntools > button.tabtool { height:26px; min-width:28px; margin-left:4px; padding:0 6px; display:inline-flex; align-items:center; justify-content:center; gap:4px; font-size:12px; font-weight:600; }
     .nseg { display:inline-flex; gap:2px; padding:2px; margin:0 2px; border-radius:8px; background:var(--btn); }
     .ntools .nseg .nb { width:28px; height:24px; }
@@ -716,6 +753,15 @@
     .live * { font-family:inherit; }
     .live .mk { display:none; }
     .live .ln.chl { font-weight:700; font-size:var(--chfs, 14px); letter-spacing:var(--chls, 0px); }
+    .live .chd { border-radius:3px; transition:background .15s; }
+    .live .chd.hov { background:rgba(62,166,255,.22); }
+    .live img.keysig { display:inline-block; height:calc(var(--edfs, 13px) * 3.4); width:auto; vertical-align:middle; margin-left:1.2em; pointer-events:auto; user-select:none; }
+    :host([data-theme="dark"]) .live img.keysig { filter:invert(.9); }
+    .chpop { position:fixed; z-index:2147483647; padding:8px 10px 6px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:10px;
+      box-shadow:0 6px 22px rgba(0,0,0,.35); pointer-events:none; opacity:0; transform:translateY(4px); transition:opacity .12s, transform .12s; text-align:center; }
+    .chpop.show { opacity:1; transform:none; }
+    .chpop svg { display:block; margin:0 auto; }
+    .chpop .cp-fr { font:600 11px var(--mono); color:var(--muted); margin-top:2px; letter-spacing:.06em; }
     .live .ln.sec { color:var(--accent); font-weight:600; }
     .live .ln.h1, .live .ln.h2, .live .ln.h3 { font-family:Roboto, Arial, sans-serif; font-weight:700; color:var(--strong); }
     .live .ln.h1 { font-size:calc(var(--edfs, 13px) * 1.55); } .live .ln.h2 { font-size:calc(var(--edfs, 13px) * 1.3); } .live .ln.h3 { font-size:calc(var(--edfs, 13px) * 1.12); }
@@ -812,9 +858,9 @@
     .md .st-bar { display:grid; grid-auto-rows:20px; border-left:2px solid var(--muted); }
     .md .st-m:last-child .st-bar { border-right:2px solid var(--muted); }
     .md .st-bar span { min-width:28px; padding:0 3px; height:20px; line-height:20px; text-align:center; font:600 12px var(--mono); color:var(--strong); white-space:nowrap;
-      background-image:linear-gradient(to bottom, transparent 9.5px, var(--muted) 9.5px, var(--muted) 10.5px, transparent 10.5px); }
+      background-image:linear-gradient(to bottom, transparent 9px, var(--muted) 9px, var(--muted) 10.5px, transparent 10.5px); }
     .md .st-bar span.f { background-image:linear-gradient(to right, transparent 5px, var(--input) 5px, var(--input) calc(100% - 5px), transparent calc(100% - 5px)),
-      linear-gradient(to bottom, transparent 9.5px, var(--muted) 9.5px, var(--muted) 10.5px, transparent 10.5px); }
+      linear-gradient(to bottom, transparent 9px, var(--muted) 9px, var(--muted) 10.5px, transparent 10.5px); }
     .md blockquote { margin:8px 0; padding:2px 10px; border-left:3px solid var(--accent); color:var(--muted); }
     .md hr { border:none; border-top:1px solid var(--line); margin:12px 0; }
     .md a { color:var(--accent); }
@@ -829,9 +875,32 @@
     .md mark { background:#ffe066; color:#000; border-radius:2px; padding:0 2px; }
 
     /* scale library */
-    .modal.scalemod { width:1060px; max-width:calc(100vw - 24px); max-height:92vh; }
+    .modal.scalemod { width:1000px; max-width:calc(100vw - 24px); max-height:92vh; }
+    /* the list on the left can be hidden, which makes the window narrower */
+    .modal.scalemod.noside { width:800px; }
+    /* CAGED and the circle of fifths have no list and need less room */
+    .modal.scalemod.narrow, .modal.scalemod.narrow.noside { width:760px; }
+    .scalemod.noside .scside { display:none; }
+    #scSideBtn.sbon { color:var(--accent); border-color:var(--accent); }
+    #scSideBtn.nolist { visibility:hidden; }
+    #scSideBtn { margin-left:6px; }
+    .scalemod.noside #scSideBtn .scside-ar { transform:translateX(1.2px) scaleX(-1); transform-origin:3px 6px; }
+    /* the fretboard fills the width, so its right edge lines up with the buttons above it and with Close below */
+    .scneck > svg { width:100%; height:auto; min-width:560px; }
+    /* the key signature beside the pattern rows */
+    .scrows { display:flex; align-items:center; gap:12px; }
+    .scrowsl { flex:none; min-width:0; display:flex; flex-direction:column; gap:6px; }
+    .sckey { flex:none; display:flex; align-items:center; gap:8px; padding:2px 10px 2px 6px; border:none; border-radius:6px; background:#fff; color:#222; }
+    .sckey:empty { display:none; }
+    .sckey img { height:52px; width:auto; display:block; }
+
+    .sckey .sk-t { display:flex; flex-direction:column; font-size:11.5px; line-height:1.35; white-space:nowrap; }
+    .sckey .sk-t b { color:#111; font-size:12px; }
+    .sckey .sk-t span { color:#666; }
+    .staff .st-lab { font:600 11px Roboto, Arial, sans-serif; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:6px 0 1px 2px; }
+    .staff .st-lab:first-child { margin-top:0; }
     .scwrap { display:flex; min-height:0; flex:1; overflow:hidden; }
-    .scside { width:220px; flex:none; display:flex; flex-direction:column; gap:6px; padding:10px; border-right:1px solid var(--line); min-height:0; }
+    .scside { width:200px; flex:none; display:flex; flex-direction:column; gap:6px; padding:10px; border-right:1px solid var(--line); min-height:0; }
     .scside input[type=search] { width:100%; background:var(--input); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 8px; font-size:13px; }
     .scside input[type=search]:focus { outline:none; border-color:var(--accent); }
     .sclist { overflow:auto; min-height:0; flex:1; display:flex; flex-direction:column; gap:1px; }
@@ -899,7 +968,7 @@
     .scpane:not(.show) { display:none !important; }
     .modal-head .sctabs { margin-left:10px; font-weight:400; }
     .cfpane { display:flex; gap:18px; padding:12px 16px; overflow:auto; flex:1; min-height:0; }
-    .cfleft { width:390px; flex:none; }
+    .cfleft { width:380px; flex:none; }
     .cfhint { margin-top:6px; line-height:1.45; }
     .cf-seg { fill:var(--item); stroke:var(--bg); stroke-width:2; cursor:pointer; }
     .cf-seg:hover { fill:var(--btn-h); }
@@ -992,7 +1061,8 @@
     /* chord sheets */
     .modal-back.top3 { z-index:13; }
     .modal.lymod { width:380px; }
-    .modal.tunermod { width:440px; }
+    .modal.tunermod { width:500px; }
+    #tuTuning { max-width:165px; } #tuCount, #tuA4 { max-width:96px; }
     .tubar { display:flex; align-items:center; gap:6px; padding:8px 12px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
     .tumode { margin:10px auto 0; }
     .tumode button { display:inline-flex; align-items:center; gap:5px; padding:0 12px; }
@@ -1022,6 +1092,16 @@
     .tuopts[hidden] { display:none; }
     .lybody { padding:14px 16px; line-height:1.5; }
     .gkbody p { margin:4px 0; }
+    .resetbtn { display:inline-flex; align-items:center; gap:5px; }
+    .rsbody { display:flex; flex-direction:column; gap:10px; padding:12px; }
+    .rsopt { display:flex; align-items:flex-start; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--item); }
+    .rsopt p { margin:4px 0 0; font-size:12px; line-height:1.45; color:var(--muted); }
+    .rsopt > button, .rsbtns button { flex:none; white-space:nowrap; }
+    .rsall { border-color:color-mix(in srgb, var(--red) 55%, var(--border)); }
+    .rsbtns { display:flex; flex-direction:column; gap:6px; }
+    .rsbtns button { display:inline-flex; align-items:center; justify-content:center; gap:5px; }
+    button.rsdanger { background:var(--red); border-color:var(--red); color:#fff; font-weight:600; }
+    button.rsdanger:hover { filter:brightness(1.1); background:var(--red); }
     .lyopt { display:flex; margin-top:10px; }
     .lyopt[hidden] { display:none; }
     .gkkey { font:700 26px Roboto, Arial, sans-serif; color:var(--strong); margin-bottom:2px; }
@@ -1031,6 +1111,18 @@
     .chbody textarea { white-space:pre; overflow:auto; }
     .edside { width:250px; flex:none; overflow:auto; border-left:1px solid var(--line); display:flex; flex-direction:column; }
     .edside:not(:has(.edrefs:not(:empty))):not(:has(.chlib:not(.off))) { display:none; }
+    #notesWin.noside .edside { display:none; }
+    /* a narrow editor (to see more of the video): the tool buttons show just their icons, so they stay on one row */
+    #notesWin { container:edwin / inline-size; }
+    @container edwin (max-width: 760px) {
+      .edtools .tabtool > span:not(.caret) { display:none; }
+      .edtools .tabtool { padding-left:7px; padding-right:7px; }
+    }
+    .edsidebtn { display:inline-flex; align-items:center; justify-content:center; margin-left:4px; color:var(--accent); }
+    .edsidebtn.off { color:var(--muted); }
+    #edShapesOn { color:var(--accent); } #edShapesOn.off { color:var(--muted); }
+    .edsidebtn .ar { transition:transform .15s; transform-origin:9.1px 6px; }
+    .edsidebtn.off .ar { transform:scaleX(-1); }
     .chlib.off { display:none; }
     .cl-head { padding:10px 10px 4px; font-size:11px; font-weight:600; color:var(--muted); }
     .cl-add { position:relative; padding:0 10px; }
@@ -1058,6 +1150,8 @@
     .chshapes:empty { display:none; }
     .chshapes.off { display:none; }
     .chshapes .cs-dg { flex:none; }
+    .chshapes .cs-none { font-size:12px; color:var(--muted); padding:2px; }
+    .chshapes .linkish { background:none; border:none; padding:0; color:var(--accent); font:inherit; cursor:pointer; text-decoration:underline; }
     .md pre.song { background:none; border:0; padding:0; margin:4px 0; font:13px/1.45 var(--mono); color:var(--text); white-space:pre; overflow-x:auto; }
     .song .sg-ch, .song .sg-ch b { color:var(--accent); font-weight:700; font-family:var(--mono); }
     .song .sg-ch b { cursor:pointer; }
@@ -1182,8 +1276,8 @@
     <div class="head">
       <img class="logo" alt="" src="data:image/png;base64,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" /><span class="title">Guitar Playa Companion</span>
       <button class="hbtn" id="libBtn" title="Saved Videos"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M4.2 3 H10.2 M4.2 6 H10.2 M4.2 9 H10.2"/><circle cx="2" cy="3" r=".6" fill="currentColor" stroke="none"/><circle cx="2" cy="6" r=".6" fill="currentColor" stroke="none"/><circle cx="2" cy="9" r=".6" fill="currentColor" stroke="none"/></svg></button>
-      <button class="hbtn vidsave" id="saveVid" title="Save Video"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M2 2 h6.6 L10 3.4 V10 H2 Z M4 2 v2.4 h3.6 V2 M3.8 10 V7.2 h4.4 V10"/></svg></button>
-      <button class="hbtn" id="dlAll" title="Download"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M6 1.5 V7.6 M3.6 5.3 L6 7.7 L8.4 5.3 M1.8 8.4 V10.3 H10.2 V8.4"/></svg></button>
+      <button class="hbtn" id="impBtn" title="Import"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M6 7.7 V1.6 M3.6 4 L6 1.6 L8.4 4 M1.8 8.4 V10.3 H10.2 V8.4"/></svg></button>
+      <button class="hbtn" id="dlAll" title="Export"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M6 1.5 V7.6 M3.6 5.3 L6 7.7 L8.4 5.3 M1.8 8.4 V10.3 H10.2 V8.4"/></svg></button>
       <button class="hbtn" id="tunerBtn" title="Tuner"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M4.3 1.2 V5.3 a1.7 1.7 0 0 0 3.4 0 V1.2 M6 7 V10.8 M4.8 10.8 H7.2"/></svg></button>
       <button class="hbtn" id="metroShow" title="Metronome"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M4.4 1.6 H7.6 L10 10.6 H2 Z M6 8.2 L8.9 3.1"/></svg></button>
       <button class="hbtn" id="themeBtn" title="Theme"></button>
@@ -1207,6 +1301,7 @@
         </span>
       </div>
         <div class="loopbar" id="loopBar">
+          <button class="small vidsave" id="vidSave" title="Save Video"></button>
           <button class="lselbtn grow" id="loopSel" aria-haspopup="listbox" title="Loops"><span class="lsellab" id="loopSelLab"></span><svg class="hico" viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M2.5 4.25 L6 7.75 L9.5 4.25"/></svg></button>
           <button class="savebtn" id="saveCur"></button>
           <button class="small" id="saveNew" title="New Loop"><svg class="hico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M6 2 V10 M2 6 H10"/></svg></button>
@@ -1266,7 +1361,7 @@
       </div>
 
       <details class="section metro-sec" id="metroSec">
-        <summary><span class="grow">Metronome</span><span class="muted" id="metroSum"></span></summary>
+        <summary id="metroSumRow" title="Show Metronome"><span class="mchev" aria-hidden="true"><svg class="hico" viewBox="0 0 12 12" width="12" height="12"><path d="M4.4 2.4 L8 6 L4.4 9.6"/></svg></span><span>Metronome</span><span class="mhint" id="metroHint">Show</span><span class="grow"></span><span class="muted" id="metroSum"></span></summary>
         <div class="metro">
         <div class="mcol">
           <div class="row">
@@ -1346,7 +1441,7 @@
         <span class="muted grow" id="libStats"></span>
         <button class="ico-btn" id="libExport" title="Export"><svg class="hico" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><path d="M6 1.5 V7.6 M3.6 5.3 L6 7.7 L8.4 5.3 M1.8 8.4 V10.3 H10.2 V8.4"/></svg><span>Export</span></button>
         <button class="ico-btn" id="libImport" title="Import"><svg class="hico" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><path d="M6 7.7 V1.6 M3.6 4 L6 1.6 L8.4 4 M1.8 8.4 V10.3 H10.2 V8.4"/></svg><span>Import</span></button>
-        <input type="file" id="libFile" accept=".json,application/json" multiple hidden />
+        <input type="file" id="libFile" accept=".gpyc,.json,application/json" multiple hidden />
       </div>
     </div>
   </div>
@@ -1402,8 +1497,7 @@
       <button class="nb" id="edDraw" title="Draw">${ic("draw")}</button>
       <span class="tsep"></span>
       <button class="nb menu" data-menu="insert" title="Insert">${ic("plus")}<span class="caret">${ic("chevron", 10)}</span></button>
-      <span class="grow"></span>
-      <label class="chk sctog" title="Chord Shapes"><input type="checkbox" id="edShapesOn" /> Chord Shapes</label>
+      <button class="nb edsidebtn" id="edShapesOn" title="Hide Chord Shapes" aria-pressed="true"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><rect x="1.3" y="2" width="9.4" height="8" rx="1.2"/><path d="M7.6 2 V10"/><path class="ar" d="M8.6 4.8 L9.6 6 L8.6 7.2"/></svg></button>
     </div>
     <div class="drawbar" id="drawBar" role="toolbar" aria-label="Draw">
       ${[["pencil", "Pencil"], ["pen", "Pen"], ["quill", "Old ink pen"], ["marker", "Marker"], ["chalk", "Chalk"], ["smear", "Smear"], ["eraser", "Eraser"]].map(([t, n]) => `<button class="dtool" data-tool="${t}" title="${n}">${ic(t, 17)}</button>`).join("")}
@@ -1425,15 +1519,14 @@
       <button data-md="tab" class="tabtool" title="Tabs"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M1 2.5 H11 M1 4.8 H11 M1 7.1 H11 M1 9.4 H11" stroke-width="1.1"/><circle cx="4" cy="4.8" r="1.3" fill="currentColor" stroke="none"/><circle cx="8" cy="7.1" r="1.3" fill="currentColor" stroke="none"/></svg><span>Tabs</span></button>
       <button data-menu="loops" class="tabtool" title="Loops">${ic("loop", 14)}<span>Loops</span></button>
       <button data-md="links" class="tabtool" title="Links">${ic("link", 14)}<span>Links</span></button>
-      <button data-md="lyrics" class="tabtool" id="edLyrics" title="Guess Lyrics"><svg class="hico mic" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><rect x="4.4" y="1" width="3.2" height="5.8" rx="1.6"/><path d="M2.6 5.6 a3.4 3.4 0 0 0 6.8 0 M6 9 V11 M4.3 11 H7.7"/></svg><span>Guess Lyrics</span></button>
-      <button data-md="key" class="tabtool" id="edKey" title="Guess Key"><svg class="hico mic" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><circle cx="3.6" cy="6" r="2.3"/><path d="M5.9 6 H11 M9.3 6 V8 M10.9 6 V7.6"/></svg><span>Guess Key</span></button>
+      <button data-menu="guess" class="tabtool" id="edLyrics" title="Guess" aria-haspopup="menu">${ic("spark", 14)}<span>Guess</span><span class="caret">${ic("chevron", 10)}</span></button>
     </div>
     <div class="nbody" id="notesBody">
       <div class="edscroll" id="edScroll"><div id="notesText" class="live" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="Page"></div><svg class="edink" id="edInk" xmlns="http://www.w3.org/2000/svg"><defs><filter id="ygcChalk" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2" result="d"/><feComponentTransfer in="n" result="g"><feFuncA type="discrete" tableValues="0 1 1 1 1 0.6 1 1 1 1"/></feComponentTransfer><feComposite in="d" in2="g" operator="in"/></filter><filter id="ygcSmear" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3.2"/></filter></defs><g id="edInkG"></g></svg></div>
       <input type="file" id="edImgFile" accept="image/*" hidden />
       <div class="edside" id="edSide"><div class="edrefs" id="edRefs"></div><div class="chlib" id="edChLib"><div class="cl-head">Chord Library</div><div class="cl-add"><input type="search" id="edChSearch" placeholder="Add a Chord" title="Add" autocomplete="off" spellcheck="false" /><div class="sgrp scfilter clfilter" id="edChFilter" role="group" aria-label="Show"><button data-f="all">All</button><button data-f="lib">Library</button><button data-f="mine">Mine</button></div><div class="cl-sug" id="edChSug" role="listbox" aria-label="Chords"></div></div><div class="chshapes" id="edShapes"></div></div></div>
     </div>
-    <div class="modal-foot nfoot"><span class="grow"></span><button id="edPdf" title="PDF">PDF</button><button id="edPrint" title="Print">Print</button><button class="mdexp" id="edExport" title="Export">${ic("download", 14)}<span>Export</span></button><button id="notesDone" title="Close">Close</button>
+    <div class="modal-foot nfoot"><span class="grow"></span><button class="mdexp" id="edExport" title="Export">${ic("download", 14)}<span>Export</span></button><button id="notesDone" title="Close">Close</button>
     </div>
   </div>
   <div class="modal-back top3" id="tabModal">
@@ -1441,7 +1534,7 @@
       <div class="modal-head"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M1 2.5 H11 M1 4.8 H11 M1 7.1 H11 M1 9.4 H11" stroke-width="1.1"/><circle cx="4" cy="4.8" r="1.3" fill="currentColor" stroke="none"/><circle cx="8" cy="7.1" r="1.3" fill="currentColor" stroke="none"/></svg><input type="text" id="teName" class="tename" placeholder="Untitled Tab" maxlength="60" spellcheck="false" title="Name" /><select id="teList" class="telist" title="My Tabs"></select><button id="teNew" title="New">New Tab</button><button id="teSave" title="Save">Save</button><button id="teDel" class="danger" title="Delete">Delete</button><span class="grow"></span><span id="teTitle" hidden></span><button class="hbtn exit" id="teClose" title="Close"><svg class="hico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 3 L9 9 M9 3 L3 9"/></svg></button></div>
       <div class="tebar">
         <label class="muted">Tuning <select id="teTuning"></select></label>
-        <label class="muted">Capo <select id="teCapo"><option value="0">None</option>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("")}</select></label>
+        <select id="teCapo" title="Capo"><option value="0">No Capo</option>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">Capo ${i + 1}</option>`).join("")}</select>
         <span id="teCapoStr" class="sgrp capostr" role="group" aria-label="Capo strings" hidden></span>
         <label class="muted">Show <select id="teShow"><option value="fret">Finger Position</option><option value="note">Notes</option><option value="both">Notes and Finger Position</option></select></label>
         <label class="muted">Bars per Line <select id="tePer"><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></label>
@@ -1463,12 +1556,12 @@
         <div class="muted tehelp">Type frets · Arrows move · Tab: next · Delete: empty · Ctrl+Enter: insert</div>
         <div class="err" id="teErr"></div>
       </div>
-      <div class="modal-foot"><span class="muted grow" id="teInfo"></span><button id="tePdf" title="PDF">PDF</button><button id="tePrint" title="Print">Print</button><button class="primary" id="teOk">Insert Tab into Editor</button><button id="teCancel">Close</button></div>
+      <div class="modal-foot"><span class="muted grow" id="teInfo"></span><button id="teExport" class="mdexp" title="Export" data-menu-btn="1">${ic("download", 14)}<span>Export</span></button><button class="primary" id="teOk">Insert Tab into Editor</button><button id="teCancel">Close</button></div>
     </div>
   </div>
   <div class="modal-back top2" id="scaleModal">
     <div class="modal scalemod" role="dialog" aria-label="Chords, Scales, and Tabs">
-      <div class="modal-head">${ic("scales", 16)}<span>Chords, Scales, and Tabs</span><div class="sgrp sctabs" id="scTabs" role="tablist"><button data-tab="chords" role="tab">Chords</button><button data-tab="scales" role="tab">Scales</button><button data-tab="tabs" role="tab">Tabs</button><button data-tab="caged" role="tab">CAGED</button><button data-tab="circle" role="tab">Circle of Fifths</button></div><span class="grow"></span><button class="hbtn exit" id="scClose" title="Close"><svg class="hico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 3 L9 9 M9 3 L3 9"/></svg></button></div>
+      <div class="modal-head">${ic("scales", 16)}<span>Chords, Scales, and Tabs</span><button class="hbtn" id="scSideBtn" title="Hide the List" aria-pressed="false"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><rect x="1.3" y="2" width="9.4" height="8" rx="1.2"/><path d="M4.4 2 V10"/><path class="scside-ar" d="M3.4 4.8 L2.4 6 L3.4 7.2"/></svg></button><div class="sgrp sctabs" id="scTabs" role="tablist"><button data-tab="chords" role="tab">Chords</button><button data-tab="scales" role="tab">Scales</button><button data-tab="tabs" role="tab">Tabs</button><button data-tab="caged" role="tab">CAGED</button><button data-tab="circle" role="tab">Circle of Fifths</button></div><span class="grow"></span><button class="hbtn exit" id="scClose" title="Close"><svg class="hico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 3 L9 9 M9 3 L3 9"/></svg></button></div>
       <div class="scwrap scpane" id="scPaneScales">
         <div class="scside">
           <input type="search" id="scSearch" placeholder="Find a Scale" title="Search" />
@@ -1486,6 +1579,7 @@
             <div class="sgrp" id="scLabels" role="group" aria-label="Labels"><button data-v="notes" title="Notes">Notes</button><button data-v="intervals" title="Intervals">Intervals</button><button data-v="none" title="Dots">None</button></div>
           </div>
           <div class="sctitle"><span id="scName"></span><span class="scnotes" id="scNotes"></span><span class="scformula" id="scFormula"></span></div>
+          <div class="scrows"><div class="scrowsl">
           <div class="scbar sctight">
             <span class="sclbl">Patterns</span>
             <div class="sgrp" id="scPos" role="group" aria-label="Pattern"></div>
@@ -1499,10 +1593,11 @@
             <span class="sclbl">Frets</span>
             <select id="scFrets" title="Frets">${[18, 19, 20, 21, 22, 23, 24].map((n) => `<option value="${n}">${n}</option>`).join("")}</select>
             <span class="sclbl">Capo</span>
-            <select id="scCapo" title="Capo">${Array.from({ length: 13 }, (_, i) => `<option value="${i}">${i ? "Fret " + i : "None"}</option>`).join("")}</select>
+            <select id="scCapo" title="Capo">${Array.from({ length: 13 }, (_, i) => `<option value="${i}">${i ? "Capo " + i : "No Capo"}</option>`).join("")}</select>
             <label class="chk sctog" title="Show All"><input type="checkbox" id="scGhost" /> Show All</label>
             <button class="screset" id="scReset" title="Reset">↺ Reset</button>
           </div>
+          </div><div class="sckey" id="scKey" title="Key signature"></div></div>
           <div class="scneck" id="scNeck"></div>
           <div class="md"><div class="sctab" id="scTab"></div></div>
         </div>
@@ -1517,6 +1612,8 @@
         <div class="scmain chmain">
           <div class="scbar">
             <label class="muted">Root <select id="chRoot"></select></label>
+            <select id="chTuning" title="Tuning"></select>
+            <div class="sgrp" id="chView" role="group" aria-label="Show"><button data-v="diagram">Diagrams</button><button data-v="text">Text</button></div>
           </div>
           <div class="chhead"><b id="chName"></b><span class="muted" id="chNotes"></span></div>
           <div class="chgrid" id="chShapes"></div>
@@ -1538,7 +1635,6 @@
         <div class="cgboxes" id="cgBoxes"></div>
         <div class="scneck" id="cgNeck"></div>
         <div class="cginfo" id="cgInfo"></div>
-        <div class="muted cgabout">CAGED: the five open chords C, A, G, E and D, moved up the neck, give five ways to play any chord, always in that order going up (after D it starts again with C). Each shape sits inside one of the five scale patterns, so you can see the chord inside the scale. Faint dots are the same chord's notes in the other shapes.</div>
       </div>
       <div class="scwrap scpane tbpane" id="scPaneTabs">
         <div class="scside">
@@ -1552,7 +1648,7 @@
           <div class="chacts"><button id="tbEdit" title="Edit">Edit</button><button id="tbDel" class="danger" title="Delete">Delete</button></div>
         </div>
       </div>
-      <div class="modal-foot"><span class="muted grow" id="scInfo"></span><button id="scPdf" title="PDF">PDF</button><button id="scPrint" title="Print">Print</button><span class="insgrp"><button class="primary" id="scInsert" aria-haspopup="menu">Insert into Editor <span class="caret">▾</span></button><span class="insmenu" id="scInsMenu" role="menu" hidden><button data-as="text" role="menuitem">As Text</button><button data-as="image" role="menuitem">As Image</button></span></span><button id="scDone">Close</button></div>
+      <div class="modal-foot"><span class="muted grow" id="scInfo"></span><button id="scExport" class="mdexp" title="Export" data-menu-btn="1">${ic("download", 14)}<span>Export</span></button><span class="insgrp"><button class="primary" id="scInsert" aria-haspopup="menu">Insert into Editor <span class="caret">▾</span></button><span class="insmenu" id="scInsMenu" role="menu" hidden><button data-as="text" role="menuitem">As Text</button><button data-as="image" role="menuitem">As Image</button></span></span><button id="scDone">Close</button></div>
     </div>
   </div>
   <div class="modal-back" id="tunerModal">
@@ -1560,17 +1656,18 @@
       <div class="modal-head"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M4.3 1.2 V5.3 a1.7 1.7 0 0 0 3.4 0 V1.2 M6 7 V10.8 M4.8 10.8 H7.2"/></svg><span class="grow">Tuner</span><button class="hbtn exit" id="tuClose" title="Close"><svg class="hico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 3 L9 9 M9 3 L3 9"/></svg></button></div>
       <div class="tubar">
         <div class="sgrp" id="tuInstr" role="group" aria-label="Instrument"><button data-v="guitar">Guitar</button><button data-v="bass">Bass</button></div>
+        <select id="tuCount" title="Strings"></select>
         <select id="tuTuning" title="Tuning"></select>
         <label class="muted">A4 <select id="tuA4" title="Pitch">${Array.from({ length: 21 }, (_, i) => `<option value="${430 + i}">${430 + i} Hz</option>`).join("")}</select></label>
       </div>
-      <div class="sgrp tumode" id="tuMode" role="group" aria-label="Mode"><button data-v="listen" title="Listen"><svg class="hico mic" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><rect x="4.4" y="1" width="3.2" height="5.8" rx="1.6"/><path d="M2.6 5.6 a3.4 3.4 0 0 0 6.8 0 M6 9 V11 M4.3 11 H7.7"/></svg><span>Listen</span></button><button data-v="play" title="Play Tone"><svg class="hico mic" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><path d="M1.6 4.5 H3.6 L6.4 2.2 V9.8 L3.6 7.5 H1.6 Z M8.2 4.2 a2.6 2.6 0 0 1 0 3.6 M9.6 2.8 a4.6 4.6 0 0 1 0 6.4"/></svg><span>Play Tone</span></button></div>
+      <div class="sgrp tumode" id="tuMode" role="group" aria-label="Mode"><button data-v="listen" title="Microphone"><svg class="hico mic" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><rect x="4.4" y="1" width="3.2" height="5.8" rx="1.6"/><path d="M2.6 5.6 a3.4 3.4 0 0 0 6.8 0 M6 9 V11 M4.3 11 H7.7"/></svg><span>Microphone</span></button><button data-v="play" title="Play Tone"><svg class="hico mic" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><path d="M1.6 4.5 H3.6 L6.4 2.2 V9.8 L3.6 7.5 H1.6 Z M8.2 4.2 a2.6 2.6 0 0 1 0 3.6 M9.6 2.8 a4.6 4.6 0 0 1 0 6.4"/></svg><span>Play Tone</span></button></div>
       <div class="tudisp" id="tuDisp">
         <svg class="tumeter" id="tuMeter" viewBox="0 0 300 150" width="300" height="150" aria-hidden="true"></svg>
         <div class="tunote"><b id="tuNote">–</b><span id="tuCents"></span></div>
         <div class="tumsg" id="tuMsg"></div>
       </div>
       <div class="tustrings" id="tuStrings" role="group" aria-label="Strings"></div>
-      <div class="tuopts" id="tuOpts"><div class="sgrp" id="tuSound" role="group" aria-label="Sound"><button data-v="once" title="Once">Pluck Once</button><button data-v="repeat" title="Repeat">Repeat</button><button data-v="constant" title="Constant">Constant</button></div><button id="tuAll" title="Play All">Play All</button></div>
+      <div class="tuopts" id="tuOpts"><div class="sgrp" id="tuSound" role="group" aria-label="Sound"><button data-v="repeat" title="Pluck">Pluck</button><button data-v="constant" title="Constant">Constant</button></div></div>
       <div class="tuopts tuvol"><label class="muted" title="Volume">Volume <input type="range" id="tuVol" min="0" max="100" step="1" /></label></div>
       <div class="modal-foot"><span class="muted grow" id="tuInfo"></span><button id="tuDone">Close</button></div>
     </div>
@@ -1624,18 +1721,35 @@
           <label class="muted">Chord Name<input type="text" id="shName" spellcheck="false" maxlength="30" title="Name" /></label>
           <label class="muted">Frets, Low E to High e<input type="text" id="shFrets" spellcheck="false" title="Frets" /></label>
           <div class="row"><span class="muted grow">Start Fret</span><button class="small" id="shBaseDown" title="Lower">−</button><b id="shBase">1</b><button class="small" id="shBaseUp" title="Higher">+</button></div>
-          <div class="row"><span class="muted grow">Capo</span><button class="small" id="shCapoDown" title="Capo Down">−</button><b id="shCapo">None</b><button class="small" id="shCapoUp" title="Capo Up">+</button></div>
+          <div class="row"><span class="muted grow">Capo</span><button class="small" id="shCapoDown" title="Capo Down">−</button><b id="shCapo">No Capo</b><button class="small" id="shCapoUp" title="Capo Up">+</button></div>
           <button id="shOther" title="Other Shape">↻ Other Shape</button>
           <button id="shReset" title="Reset">Standard Fingering</button>
         </div>
       </div>
-      <div class="modal-foot"><span class="grow"></span><button id="shCancel">Cancel</button><button class="primary" id="shSave">Save Fingering</button></div>
+      <div class="modal-foot"><span class="grow"></span><button id="shCancel">Cancel</button><button class="primary" id="shSave">Save</button></div>
     </div>
   </div>
   <div class="modal-back" id="helpModal">
     <div class="modal" role="dialog" aria-label="Help">
       <div class="modal-head"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><circle cx="6" cy="6" r="4.9"/><path d="M4.55 4.75 a1.5 1.5 0 1 1 2.1 1.35 c-.45 .22 -.65 .55 -.65 1.05"/><circle cx="6" cy="8.8" r=".45" fill="currentColor" stroke="none"/></svg><span class="grow">How to Use Guitar Playa Companion</span><button class="hbtn exit" id="helpClose" title="Close"><svg class="hico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 3 L9 9 M9 3 L3 9"/></svg></button></div>
       <div class="modal-body help" id="helpBody"></div>
+      <div class="modal-foot"><button class="danger resetbtn" id="resetOpen" title="Reset to Default"><svg class="hico" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><path d="M2.6 4.4 A4 4 0 1 1 2.2 7.4 M2.6 1.8 V4.4 H5.2"/></svg><span>Reset to Default…</span></button><span class="grow"></span><button id="helpDone">Close</button></div>
+    </div>
+  </div>
+  <div class="modal-back top3" id="resetModal">
+    <div class="modal lymod" role="dialog" aria-label="Reset to Default">
+      <div class="modal-head"><svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M2.6 4.4 A4 4 0 1 1 2.2 7.4 M2.6 1.8 V4.4 H5.2"/></svg><span class="grow">Reset to Default</span><button class="hbtn exit" id="rsClose" title="Close"><svg class="hico" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 3 L9 9 M9 3 L3 9"/></svg></button></div>
+      <div class="modal-body rsbody">
+        <div class="rsopt">
+          <div class="grow"><b>Reset Settings</b><p>Theme, where the panel sits, speed, metronome, tuner, editor, scale and chord choices go back to how they were at the start. Your saved videos, loops, pages, links, tabs, chords and scales are kept.</p></div>
+          <button id="rsSettings">Reset Settings</button>
+        </div>
+        <div class="rsopt rsall">
+          <div class="grow"><b>Erase Everything</b><p>Starts over completely: resets the settings <i>and</i> deletes every saved video, loop, page, link and picture, your tabs, and your own chords and scales. This can’t be undone. Export first to keep a copy.</p></div>
+          <div class="rsbtns"><button id="rsExport" title="Export">${ic("download", 13)}<span>Export First</span></button><button class="rsdanger" id="rsAll">Erase Everything</button></div>
+        </div>
+      </div>
+      <div class="modal-foot"><span class="grow"></span><button id="rsCancel">Cancel</button></div>
     </div>
   </div>`;
 
@@ -1720,6 +1834,8 @@
     $("metroShow").setAttribute("aria-pressed", String(!mh));
     const mo = state.settings.metroOpen !== false;
     if ($("metroSec").open !== mo) $("metroSec").open = mo;
+    $("metroHint").textContent = mo ? "Hide" : "Show";
+    $("metroSumRow").title = mo ? "Hide the metronome controls" : "Show the metronome controls";
     renderMetro();
     renderLibrary();
     renderSaveRow();
@@ -1860,8 +1976,7 @@
     if (T().on) {
       T().start = state.speed; // "reset" goes back here
       state.loopCount = 0;
-      flash(`Speed will change ${fmtStep(T().step)} each loop until ${T().limit}%`);
-    } else flash("Speed change per loop: off");
+    }
     persist();
     render();
   });
@@ -1898,7 +2013,6 @@
     state.loopCount = 0;
     persist();
     render();
-    flash(`Back to ${fmtSpeed(start)}`);
   };
   $("delayDown").onclick = (e) => setDelay((+state.settings.delay || 0) - (e.shiftKey ? 2 : 0.5));
   $("delayUp").onclick = (e) => setDelay((+state.settings.delay || 0) + (e.shiftKey ? 2 : 0.5));
@@ -2392,13 +2506,29 @@
     saveLibrary();
     renderLibrary(true);
   }
-  // save the video itself (no loop needed)
-  function saveVideo() {
+  // save the video itself (no loop needed): the disk button left of the video's name, or Save in its list
+  function saveVideo(quiet) {
     if (!state.videoId) return flash("Open a video first");
     if (videoEntry()) return;
     const now = Date.now();
     library = [{ id: newId(), videoId: state.videoId, title: videoTitle(), name: videoTitle(), desc: "", createdAt: now, updatedAt: now, loops: [] }, ...library];
     expanded.add(library[0].id);
+    persist(); // now that it's saved, where you are in it (A, B, speed) is kept too
+    saveLibrary();
+    renderLibrary(true);
+    if (!quiet) flash("Video saved");
+  }
+  // delete a saved video with its loops, page and links (the bin left of the video's name, or Saved Videos)
+  function deleteVideo(v) {
+    if (!v) return;
+    library = library.filter((x) => x.id !== v.id);
+    if (v.videoId === state.videoId) state.loopId = null;
+    if (notesVid === v.videoId) {
+      notesDirty = false;
+      closeNotes();
+    }
+    if (lkVid === v.videoId) closeLinks();
+    store.remove("video:" + v.videoId);
     saveLibrary();
     renderLibrary(true);
   }
@@ -2481,7 +2611,7 @@
     return true;
   }
   function openLoopPop() {
-    if (closeLoopPop() || !videoEntry()) return;
+    if (closeLoopPop() || !state.videoId) return;
     loopPop = el("div", "lpop");
     loopPop.setAttribute("role", "listbox");
     root.append(loopPop);
@@ -2522,20 +2652,97 @@
       renderLoopPop();
     });
   }
+  let lpRename = false;
   function renderLoopPop() {
     if (!loopPop) return;
     const ve = videoEntry();
-    if (!ve) return closeLoopPop();
-    const ls = ve.loops;
+    const ls = ve ? ve.loops : [];
     loopPop.innerHTML = "";
     const vrow = el("div", "lp-row lp-vid" + (!selectedLoop() ? " sel" : ""));
     vrow.title = "Whole Video";
-    vrow.append(el("span", "lp-name", ve.name || ve.title || "This video"));
+    if (lpRename) {
+      // the video's name, edited right here; Enter or the disk saves it (and saves the video if it isn't yet)
+      const inp = el("input", "lp-ren");
+      inp.type = "text";
+      inp.maxLength = 120;
+      inp.value = (ve && (ve.name || ve.title)) || videoTitle() || "";
+      inp.setAttribute("aria-label", "Video name");
+      const done = (keep) => {
+        if (!lpRename) return;
+        lpRename = false;
+        const name = inp.value.trim().replace(/\s+/g, " ");
+        if (keep && name) {
+          let v = videoEntry();
+          if (!v) {
+            saveVideo(true);
+            v = videoEntry();
+          }
+          if (v && name !== v.name) {
+            v.name = name;
+            v.updatedAt = Date.now();
+            saveLibrary();
+            renderLibrary(true);
+          }
+          flash(ve ? "Name saved" : "Video saved");
+        }
+        renderLoopPop();
+        render();
+      };
+      inp.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") e.preventDefault(), done(true);
+        else if (e.key === "Escape") e.preventDefault(), done(false);
+      });
+      // clicking away keeps a new name for a saved video; an unsaved video is only saved with Enter or the disk
+      inp.addEventListener("blur", () => done(!!ve));
+      inp.addEventListener("click", (e) => e.stopPropagation());
+      const ok = el("button", "lp-del lp-edit lp-ok");
+      ok.innerHTML = DISK;
+      ok.title = ve ? "Save Name" : "Save Video";
+      ok.setAttribute("aria-label", ok.title);
+      ok.addEventListener("mousedown", (e) => e.preventDefault()); // keep the typing box focused until the click
+      ok.addEventListener("click", (e) => {
+        e.stopPropagation();
+        done(true);
+      });
+      vrow.append(inp, ok);
+      setTimeout(() => (inp.focus(), inp.select()), 0);
+    } else {
+      vrow.append(el("span", "lp-name", (ve && (ve.name || ve.title)) || videoTitle() || "This video"));
+      const ren = el("button", "lp-del lp-edit");
+      ren.innerHTML = ICON.edit;
+      ren.title = ve ? "Rename" : "Name and Save";
+      ren.addEventListener("click", (e) => {
+        e.stopPropagation();
+        lpRename = true;
+        renderLoopPop();
+      });
+      vrow.append(ren);
+    }
     vrow.addEventListener("click", () => {
+      if (lpRename) return;
       closeLoopPop();
       newLoop();
     });
     loopPop.append(vrow);
+    // nothing saved yet (or no loops): a Save button right here
+    if (!ve || !ls.length) {
+      const sv = el("button", "lp-save primary");
+      sv.innerHTML = '<svg class="hico" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><path d="M2 2 h6.6 L10 3.4 V10 H2 Z M4 2 v2.4 h3.6 V2 M3.8 10 V7.2 h4.4 V10"/></svg>';
+      const asLoop = !!ve || loopValid();
+      sv.append(el("span", "", !ve && !loopValid() ? "Save Video" : "Save Loop"));
+      sv.title = "Save";
+      sv.disabled = !!ve && !loopValid();
+      if (sv.disabled) sv.title = "Set A and B";
+      sv.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeLoopPop();
+        if (asLoop && loopValid()) saveLoop(false);
+        else saveVideo();
+        render();
+      });
+      loopPop.append(sv);
+    }
     if (ls.length) loopPop.append(el("div", "lp-sep"));
     ls.forEach((l, k) => {
       const row = el("div", "lp-row" + (l.id === state.loopId ? " sel" : ""));
@@ -2587,27 +2794,6 @@
       });
       loopPop.append(row);
     });
-    // everything (videos, loops, editor pages with their links, chord shapes) in one file, and back again
-    loopPop.append(el("div", "lp-sep"));
-    const io = el("div", "lp-io");
-    const ex = el("button", "ico-btn");
-    ex.innerHTML = ic("download", 13);
-    ex.append(el("span", "", "Export All"));
-    ex.title = "Export";
-    ex.addEventListener("click", () => {
-      closeLoopPop();
-      exportLibrary();
-    });
-    const im = el("button", "ico-btn");
-    im.innerHTML = ic("upload", 13);
-    im.append(el("span", "", "Import"));
-    im.title = "Import";
-    im.addEventListener("click", () => {
-      closeLoopPop();
-      $("libFile").click();
-    });
-    io.append(ex, im);
-    loopPop.append(io);
   }
   $("loopSel").addEventListener("click", openLoopPop);
   window.addEventListener(
@@ -2620,13 +2806,50 @@
     true
   );
   $("saveCur").onclick = () => loopValid() && saveLoop(false);
-  $("saveVid").onclick = saveVideo;
+  // left of the video's name: 💾 saves the video; once saved it's a bin that deletes it (click twice)
+  const DISK = '<svg class="hico" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M2 2 h6.6 L10 3.4 V10 H2 Z M4 2 v2.4 h3.6 V2 M3.8 10 V7.2 h4.4 V10"/></svg>';
+  let vidDelArm = false, vidDelTimer = null;
+  function renderVidSave() {
+    const b = $("vidSave"), ve = videoEntry();
+    const mode = !ve ? "unsaved" : vidDelArm ? "confirm" : "saved";
+    if (b.dataset.m !== mode) {
+      b.dataset.m = mode;
+      b.className = "small vidsave " + mode;
+      b.innerHTML = mode === "unsaved" ? DISK : mode === "confirm" ? ICON.del + "<span>Delete?</span>" : ICON.del;
+    }
+    const n = ve ? ve.loops.length : 0;
+    b.title =
+      mode === "unsaved"
+        ? "Save Video"
+        : mode === "confirm"
+          ? "Click again to delete this video" + (n ? ` and its ${n === 1 ? "loop" : n + " loops"}` : "")
+          : "Delete Video";
+    b.setAttribute("aria-label", b.title);
+  }
+  $("vidSave").onclick = () => {
+    const ve = videoEntry();
+    clearTimeout(vidDelTimer);
+    if (!ve) {
+      vidDelArm = false;
+      saveVideo();
+    } else if (!vidDelArm) {
+      vidDelArm = true; // ask first: deleting also removes the loops, the page and the links
+      vidDelTimer = setTimeout(() => ((vidDelArm = false), renderVidSave()), 3000);
+    } else {
+      vidDelArm = false;
+      deleteVideo(ve);
+      flash("Video deleted");
+    }
+    render();
+  };
+  $("impBtn").onclick = () => $("libFile").click();
   $("saveNew").onclick = newLoop;
   // the metronome section can be folded away; remember the choice (open by default)
   $("metroSec").addEventListener("toggle", () => {
     if (state.settings.metroOpen === $("metroSec").open) return;
     state.settings.metroOpen = $("metroSec").open;
     store.set("settings", state.settings); // save right away
+    render();
   });
   function renderSaveRow() {
     if (!state.videoId) return;
@@ -2638,9 +2861,10 @@
     const i = ls.findIndex((l) => l.id === state.loopId);
     // the loop list button: shows the loop you're on (or the video when none is picked)
     const ve = videoEntry();
-    const lab = !ve ? "" : i >= 0 ? `${i + 1}. ${ls[i].name}` : ve.name || ve.title || "This video";
+    const lab = !ve ? videoTitle() || "This video" : i >= 0 ? `${i + 1}. ${ls[i].name}` : ve.name || ve.title || "This video";
     if ($("loopSelLab").textContent !== lab) $("loopSelLab").textContent = lab;
-    $("loopSel").disabled = !ve; // nothing saved yet: empty list
+    $("loopSel").disabled = false;
+    renderVidSave();
     $("loopEdit").disabled = i < 0;
     $("loopSel").title = "Loops";
     // Save: saves the loop (overwrites the selected one, or adds a new one); saving a loop also saves its video
@@ -2660,12 +2884,6 @@
     const mode = "loop";
     btn.classList.toggle("is-saved", green);
     btn.disabled = !defined; // nothing to save until A and B are set
-    // "Save video" next to the time: saves the video on its own; disabled once it's saved
-    const vb = $("saveVid");
-    const vidSaved = !!videoEntry();
-    vb.disabled = vidSaved;
-    vb.classList.toggle("is-saved", vidSaved);
-    vb.title = vidSaved ? "Saved" : "Save Video";
     const key = `${mode}|${label}`;
     if (btn.dataset.s !== key) {
       btn.innerHTML = (green ? '<svg class="hico" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><path d="M2.4 6.3 L5 8.7 L9.6 3.5"/></svg>' : '<svg class="hico" viewBox="0 0 12 12" width="13" height="13" aria-hidden="true"><path d="M2 2 h6.6 L10 3.4 V10 H2 Z M4 2 v2.4 h3.6 V2 M3.8 10 V7.2 h4.4 V10"/></svg>') + `<span>${label}</span>`;
@@ -2708,7 +2926,7 @@
         return list;
     }
   }
-  const anyModalOpen = () => !!loopPop || !!exPop || !!lnPop || ["lyModal", "gkModal", "tunerModal", "linksModal", "scEdModal", "shapeModal", "libModal", "helpModal", "loopModal", "tabModal", "scaleModal", "notesWin"].some((id) => $(id).classList.contains("show"));
+  const anyModalOpen = () => !!loopPop || !!exPop || !!lnPop || ["resetModal", "lyModal", "gkModal", "tunerModal", "linksModal", "scEdModal", "shapeModal", "libModal", "helpModal", "loopModal", "tabModal", "scaleModal", "notesWin"].some((id) => $(id).classList.contains("show"));
   function openLib() {
     closeHelp();
     editing = null;
@@ -2856,7 +3074,6 @@
               v.name = name || v.title;
               v.desc = desc;
               v.updatedAt = Date.now();
-              flash(`Updated: ${v.name}`);
             }
           )
         );
@@ -2902,15 +3119,7 @@
           renderLibrary(true);
         }),
         iconBtn(ICON.del, "Delete this video and all its loops", () => {
-          library = library.filter((x) => x.id !== v.id);
-          if (here) state.loopId = null;
-          if (notesVid === v.videoId) {
-            notesDirty = false;
-            closeNotes();
-          }
-          saveLibrary();
-          renderLibrary(true);
-          flash(`Deleted: ${v.name || v.title}`);
+          deleteVideo(v);
           if (!library.length) closeLib();
         }, "del")
       );
@@ -2927,7 +3136,6 @@
                 l.name = name || l.name;
                 l.updatedAt = Date.now();
                 if (here && l.id === state.loopId) nameEdited = false;
-                flash(`Renamed: ${l.name}`);
               })
             );
             loops.append(row);
@@ -2965,23 +3173,57 @@
   });
   $("libSearch").addEventListener("input", () => renderLibrary(true));
 
-  // ----- export / import (every saved video and loop has a unique id, so duplicates are skipped) -----
-  const FILE_APP = "YouTube Guitar Playa Companion";
-  async function exportLibrary() {
-    if (!library.length && !Object.keys(chordShapesMap).length && !customScales.length && !myTabs.length) return flash("Nothing saved to export yet");
-    const nLoops = library.reduce((n, v) => n + v.loops.length, 0);
-    const data = { app: FILE_APP, format: 1, exportedAt: new Date().toISOString(), videos: library, chordShapes: chordShapesMap, scales: customScales, tabs: myTabs, images: await imagesFor(library) };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const d = new Date();
-    const p2 = (n) => String(n).padStart(2, "0");
+  // ----- saving a file: Chrome's Save dialog, so you choose the folder and the name -----
+  // The type (and so the extension) is fixed: a name typed without it gets it added back.
+  // makeBlob runs after you pick the place (it may take a moment, e.g. gathering pictures).
+  const safeName = (s, dflt) => String(s || "").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || dflt;
+  async function saveFileAs(name, ext, mime, desc, makeBlob) {
+    const base = safeName(String(name).replace(new RegExp("\\." + ext + "$", "i"), ""), "export");
+    const fileName = `${base}.${ext}`;
+    if (typeof window.showSaveFilePicker === "function") {
+      let handle = null;
+      try {
+        handle = await window.showSaveFilePicker({ suggestedName: fileName, types: [{ description: desc, accept: { [mime]: ["." + ext] } }], excludeAcceptAllOption: true });
+      } catch (e) {
+        if (e && e.name === "AbortError") return false; // you closed the dialog
+        handle = null; // the dialog isn't allowed here: download it instead
+      }
+      if (handle) {
+        try {
+          const blob = await makeBlob();
+          const w = await handle.createWritable();
+          await w.write(blob);
+          await w.close();
+          flash(`Saved ${handle.name || fileName}`);
+          return true;
+        } catch (e) {
+          flash("Couldn't save the file");
+          return false;
+        }
+      }
+    }
+    const blob = await makeBlob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `guitar-playa-companion-${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}.json`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    flash(`Downloaded ${library.length} video${library.length === 1 ? "" : "s"} and ${nLoops} loop${nLoops === 1 ? "" : "s"}`);
+    return true;
+  }
+
+  // ----- export / import (every saved video and loop has a unique id, so duplicates are skipped) -----
+  const FILE_APP = "YouTube Guitar Playa Companion";
+  async function exportLibrary() {
+    if (!library.length && !Object.keys(chordShapesMap).length && !customScales.length && !myTabs.length) return flash("Nothing saved to export yet");
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, "0");
+    await saveFileAs(`guitar-playa-companion-${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`, "gpyc", "application/json", "Guitar Playa Companion export", async () => {
+      const data = { app: FILE_APP, format: 1, exportedAt: new Date().toISOString(), videos: library, chordShapes: chordShapesMap, scales: customScales, tabs: myTabs, images: await imagesFor(library) };
+      return new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    });
+
   }
   const sameLoop = (x, y) =>
     x.id === y.id || (x.name === y.name && (x.a ?? null) === (y.a ?? null) && (x.b ?? null) === (y.b ?? null) && (x.speed ?? 1) === (y.speed ?? 1));
@@ -3103,10 +3345,12 @@
   });
   function closeModals() {
     if (closeLoopPop()) return;
+    if (closeActMenu()) return;
     if (closeExport()) return;
     if (closeLinkPop()) return;
     if (drawingOn) return setDrawing(false);
     if (closeMenu()) return notesTa.focus();
+    if ($("resetModal").classList.contains("show")) return closeReset();
     if ($("linksModal").classList.contains("show")) return closeLinks();
     if ($("shapeModal").classList.contains("show")) return closeShapeEditor();
     if ($("scEdModal").classList.contains("show")) return closeScaleEditor();
@@ -3592,7 +3836,6 @@
       const title = notesVid === state.videoId ? videoTitle() : "YouTube video";
       v = { id: newId(), videoId: notesVid, title, name: title, desc: "", createdAt: now, updatedAt: now, loops: [] };
       library = [v, ...library];
-      flash("Video saved");
     }
     v.notes = text;
     v.notesUpdatedAt = v.updatedAt = now;
@@ -3610,7 +3853,7 @@
 
   const notesMode = () => "write"; // the editor is a plain text editor (no preview)
   function applyNotesMode() {
-    $("edShapesOn").checked = state.settings.songShapes !== false;
+    renderShapesBtn();
   }
   root.querySelectorAll("#notesMode button").forEach((b) =>
     b.addEventListener("click", () => {
@@ -3649,6 +3892,7 @@
     if (notesOpen()) saveNotesNow();
     notesVid = vid;
     notesDirty = false;
+    notesCaretSet = false; // until you click or type in the page, Insert into Editor adds at the end
     const v = notesEntry();
     const title = v ? v.name || v.title : videoTitle();
     // a new page starts with the video's title (nothing is saved until you type)
@@ -3668,7 +3912,7 @@
     if (notesMode() !== "preview") {
       setTimeout(() => {
         notesTa.focus();
-        const at = fresh ? Math.min(title.length + 1, notesTa.value.length) : 0; // a new page: the line under the title
+        const at = fresh ? Math.min(notesTa.value.indexOf("\n") + 1, notesTa.value.length) : 0; // a new page: the line under the title
         notesTa.setSelectionRange(at, at);
         notesTa.scrollTop = 0;
       }, 0);
@@ -4036,6 +4280,7 @@
     if (!notesOpen()) return;
     closeMenu();
     setDrawing(false);
+    hideChordPop();
     saveNotesNow();
     $("notesWin").classList.remove("show");
     notesVid = null;
@@ -4125,14 +4370,60 @@
     root.querySelectorAll("#edChFilter button").forEach((b) => b.classList.toggle("active", b.dataset.f === sideFilter()));
     // the song's chords, then the ones you added to the chord library for this page
     const extra = sideChords().filter((c) => !used.includes(c) && NL.isChord(c));
+    // All · Library · Mine also filters the chords already in the library (Mine: your own chords)
+    const f = sideFilter(), mine = new Set(myChordNames());
+    const keep = (c) => f === "all" || (f === "mine") === mine.has(c);
+    const usedF = used.filter(keep), extraF = extra.filter(keep);
+    const hiddenN = used.length + extra.length - usedF.length - extraF.length;
     const dg = (c, more) =>
       `<span class="cs-dg${more ? " extra" : ""}" data-chord="${NL.esc(c)}" title="Edit ${NL.esc(c)}">${NL.chordDiagramSvg(c, withCapo(NL.chordShape(c)), { rootPc: NL.chordRootPc(c) })}${more ? `<button class="cs-rm" data-rm="${NL.esc(c)}" title="Remove" aria-label="Remove">×</button>` : ""}</span>`;
-    shapes.innerHTML = used.map((c) => dg(c, false)).join("") + extra.map((c) => dg(c, true)).join("");
+    shapes.innerHTML =
+      usedF.map((c) => dg(c, false)).join("") +
+      extraF.map((c) => dg(c, true)).join("") +
+      (hiddenN && !usedF.length && !extraF.length ? `<span class="cs-none">${f === "mine" ? "None of your own chords in this song." : "Only your own chords in this song."} <button class="linkish" data-f="all">Show All</button></span>` : "");
   }
   function schedulePreview() {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(renderPreview, 150);
   }
+
+  // point at a chord in the page for a moment: its fingering shows (with the page's capo)
+  const CHORD_HOVER_MS = 450;
+  let chHoverEl = null, chHoverTimer = null, chPop = null;
+  function hideChordPop() {
+    clearTimeout(chHoverTimer);
+    if (chHoverEl) chHoverEl.classList.remove("hov");
+    chHoverEl = null;
+    if (chPop) chPop.classList.remove("show");
+  }
+  function showChordPop(span) {
+    if (!NL || !span.isConnected) return;
+    const name = span.dataset.chord;
+    const sh = withCapo(NL.chordShape(name));
+    if (!chPop) {
+      chPop = el("div", "chpop");
+      chPop.setAttribute("role", "tooltip");
+      root.append(chPop);
+    }
+    chPop.innerHTML = NL.chordDiagramSvg(name, sh, { rootPc: NL.chordRootPc(name) }) + (sh ? `<div class="cp-fr">${NL.esc(fretsText(sh.frets))}</div>` : "");
+    span.classList.add("hov");
+    const r = span.getBoundingClientRect(), m = chPop.getBoundingClientRect();
+    const below = r.bottom + 8 + m.height < innerHeight;
+    chPop.style.left = clamp(r.left + r.width / 2 - m.width / 2, 6, innerWidth - m.width - 6) + "px";
+    chPop.style.top = (below ? r.bottom + 6 : Math.max(6, r.top - m.height - 6)) + "px";
+    chPop.classList.add("show");
+  }
+  $("notesText").addEventListener("mouseover", (e) => {
+    const span = e.target.closest && e.target.closest(".chd");
+    if (span === chHoverEl) return;
+    hideChordPop();
+    if (!span || drawingOn) return;
+    chHoverEl = span;
+    chHoverTimer = setTimeout(() => chHoverEl === span && showChordPop(span), CHORD_HOVER_MS);
+  });
+  $("notesText").addEventListener("mouseleave", hideChordPop);
+  for (const ev of ["mousedown", "keydown", "input"]) $("notesText").addEventListener(ev, hideChordPop);
+  $("edScroll").addEventListener("scroll", hideChordPop, { passive: true });
 
   // timestamps in the notes: jump there, or loop that part (opens the video first if it's another one)
   function notesSeek(t) {
@@ -4142,7 +4433,6 @@
       cancelWait();
       v.currentTime = t;
       v.play();
-      flash(`▶ ${NL.fmtTime(t)}`);
       return;
     }
     jumpToVideo({ seek: t });
@@ -4581,7 +4871,7 @@
     const name = v ? v.name || v.title : videoTitle();
     let text = notesTa.value.replace(/\s+$/, "");
     const lines = text.split("\n");
-    if (lines[0].trim() === name.trim()) text = lines.slice(1).join("\n").replace(/^\n+/, "");
+    if (lines[0].replace(/^#{1,3}\s+/, "").trim() === name.trim()) text = lines.slice(1).join("\n").replace(/^\n+/, "");
     const esc = NL.esc;
     const used = o.chords ? [...new Set([...NL.sheetChords(notesTa.value), ...sideChords().filter((c) => NL.isChord(c))])] : [];
     const shapes = used.length ? `<div class="shapes">${used.map((c) => NL.chordDiagramSvg(c, withCapo(NL.chordShape(c)), { rootPc: NL.chordRootPc(c) })).join("")}</div>` : "";
@@ -4628,7 +4918,7 @@
     if (tab === "chords") {
       if (!chView) return;
       const info = NL.chordInfo(chView.name);
-      return printDoc(chView.name, `<h1>${esc(NL.pretty(chView.name))}</h1><p class="meta">${esc($("chNotes").textContent)}</p><div class="shapes">${chView.shapes.map((sh) => NL.chordDiagramSvg(chView.name, sh, { rootPc: NL.chordRootPc(chView.name), width: 104 })).join("")}</div>`);
+      return printDoc(chView.name, `<h1>${esc(NL.pretty(chView.name))}</h1><p class="meta">${esc($("chNotes").textContent)}</p><div class="shapes">${chView.shapes.map((sh) => NL.chordDiagramSvg(chView.name, sh, { rootPc: NL.chordRootPc(chView.name), width: 104, low: chView.std ? undefined : chTuning().midi.slice().reverse() })).join("")}</div>`);
     }
     if (tab === "scales") {
       if (!scView) return;
@@ -4698,8 +4988,7 @@
     });
   }
   $("edExport").addEventListener("click", openExport);
-  const exportOpts = () => ({ chords: !!state.settings.exportChords, links: !!state.settings.exportLinks });
-  $("edPdf").onclick = $("edPrint").onclick = () => printNotesPdf(exportOpts());
+
   window.addEventListener(
     "mousedown",
     (e) => {
@@ -4750,14 +5039,7 @@
     }
     const links = (o.links && v && v.links) || [];
     if (links.length) text += "\n\nLinks\n" + links.map((k) => [k.name, k.url, k.comment].filter(Boolean).join(" — ")).join("\n");
-    const blob = new Blob([text.endsWith("\n") ? text : text + "\n"], { type: "text/plain" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = (name.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").slice(0, 60) || "video") + ".txt";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    saveFileAs(safeName(name, "video"), "txt", "text/plain", "Text file", () => new Blob([text.endsWith("\n") ? text : text + "\n"], { type: "text/plain" }));
   }
   function mdAction(k) {
     if (k.startsWith("loopins:")) return insertLoopLine(k.slice(8));
@@ -5076,6 +5358,10 @@
       if (notesVid === state.videoId && loopValid() && !selectedLoop()) out.push("-", { icon: "loop", label: "A–B now (not saved)", hint: `${fmt(state.a)}–${fmt(state.b)}`, md: "loopins:" });
       return out;
     },
+    guess: () => [
+      { icon: "mic", label: "Lyrics", md: "lyrics" },
+      { icon: "key", label: "Key", md: "key" },
+    ],
     insert: () => [
       { icon: "ul", label: "Bulleted List", hint: "-", md: "ul" },
       { icon: "ol", label: "Numbered List", hint: "1.", md: "ol" },
@@ -5173,8 +5459,7 @@
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") {
       e.preventDefault();
       notesDirty = true;
-      saveNotesNow();
-      return flash("Saved");
+      return saveNotesNow();
     }
     if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
@@ -5232,8 +5517,8 @@
     const sel = $("teTuning");
     sel.innerHTML = "";
     const known = NL.tuningFor(te.model.names);
-    if (!known) sel.append(new Option(`Custom: ${te.model.names.join(" ")}`, "custom"));
-    NL.TUNINGS.forEach((t) => sel.append(new Option(t.name, t.id)));
+    fillTunings(sel, NL.TUNINGS);
+    if (!known) sel.prepend(new Option(`Custom: ${te.model.names.join(" ")}`, "custom"));
     sel.value = known ? known.id : "custom";
   }
   function buildTabGrid() {
@@ -5697,12 +5982,25 @@
   };
   $("teOk").onclick = applyTab;
   $("teName").addEventListener("input", () => teDirty());
-  $("tePdf").onclick = $("tePrint").onclick = () => {
+  const tePrint = () => {
     if (!te) return;
     const nm = $("teName").value.trim() || "Tab";
     const tn = NL.tuningFor(te.model.names);
     printTab(nm, [tn ? tn.name : te.model.names.join(" "), capoLabel()].filter(Boolean).join(" · "), te.model);
   };
+  $("teExport").onclick = () =>
+    openActMenu($("teExport"), [
+      { label: "PDF", run: tePrint },
+      { label: "Print", run: tePrint },
+      {
+        label: "Text File",
+        run: () => {
+          if (!te) return;
+          const nm = $("teName").value.trim() || "Tab", cl = capoLabel(), tn = NL.tuningFor(te.model.names);
+          downloadText(nm, [`${nm}${cl ? ` (${cl})` : ""}`, tn ? tn.name : "", "", NL.formatTab(te.model)].filter((x, i) => x || i === 2).join("\n"));
+        },
+      },
+    ]);
   $("teCancel").onclick = closeTabEditor;
   $("teClose").onclick = closeTabEditor;
   $("tabModal").addEventListener("click", (e) => {
@@ -5736,6 +6034,8 @@
   };
   const scTuning = () => {
     const c = SC();
+    const mine = c.customTun && c.customTun[c.instr];
+    if (c.tuning[c.instr] === "custom" && mine) return { id: "custom", name: `Custom (${mine.strings.slice().reverse().map((x) => x.toUpperCase()).join(" ")})`, instr: c.instr, group: "Yours", strings: mine.strings, midi: mine.midi };
     return NL.TUNINGS.find((t) => t.id === c.tuning[c.instr] && t.instr === c.instr) || NL.TUNINGS.find((t) => t.instr === c.instr);
   };
   const scScale = () => NL.SCALES.find((x) => x.id === SC().scale) || NL.SCALES[0];
@@ -5762,6 +6062,7 @@
     }
     renderScaleList();
     renderLib();
+    renderScSide();
     $("scaleModal").classList.add("show");
     setTimeout(() => $("scList").querySelector(".active")?.scrollIntoView({ block: "nearest" }), 0);
   }
@@ -5786,7 +6087,8 @@
       const b = el("button", sc.id === SC().scale ? "active" : "");
       b.dataset.id = sc.id;
       b.setAttribute("role", "option");
-      b.append(el("span", "", sc.name), el("span", "f", NL.pretty(sc.formula)));
+      b.append(el("span", "", sc.name));
+      b.title = NL.pretty(sc.formula);
       if (sc.mine) {
         const ed = el("span", "sced", "✎");
         ed.dataset.edit = sc.id;
@@ -5830,7 +6132,7 @@
     for (let s = 0; s < n; s++) {
       const off = strOn && !strOn[s] ? " off" : "";
       o.push(`<line class="nk-str${off}" x1="${padL + 2}" y1="${Y(s)}" x2="${nutX + fmax * fw}" y2="${Y(s)}" stroke-width="${(0.8 + 0.3 * (n - 1 - s) * (6 / n)).toFixed(2)}"/>`);
-      o.push(`<text class="nk-name${off}" x="12" y="${Y(s) + 4}">${NL.esc(names[s])}</text>`);
+      o.push(`<text class="nk-name tune${off}" data-s="${s}" x="12" y="${Y(s) + 4}"><title>Tune</title>${NL.esc(names[s])}</text>`);
     }
     for (const f of [...fretMarks, 12, 24]) if (f <= fmax && f !== capo) o.push(`<text class="nk-num" x="${nutX + (f - 0.5) * fw}" y="${bottom + 26}">${f}</text>`);
     if (capo) o.push(`<text class="nk-num nk-capon" x="${X(capo)}" y="${bottom + 26}">capo ${capo}</text>`);
@@ -5848,6 +6150,87 @@
     o.push("</svg>");
     return o.join("");
   }
+  // a tuning list with its groups (Standard & Drop, Open, 7-String …)
+  function fillTunings(sel, list, value, plain) {
+    sel.innerHTML = "";
+    const groups = new Map();
+    for (const t of list) {
+      const g = (plain ? "" : t.instr === "bass" ? "Bass: " : t.instr === "uke" ? "" : "Guitar: ") + (t.group || "");
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(t);
+    }
+    for (const [g, ts] of groups) {
+      const og = document.createElement("optgroup");
+      og.label = g;
+      ts.forEach((t) => og.append(new Option(t.name.replace(/^(Guitar|Bass): /, ""), t.id)));
+      sel.append(og);
+    }
+    if (value) sel.value = value;
+  }
+  // a little menu under (or over) a button: [{ label, run }]
+  let actPop = null;
+  function closeActMenu() {
+    if (!actPop) return false;
+    actPop.remove();
+    actPop = null;
+    return true;
+  }
+  function openActMenu(anchor, items) {
+    if (closeActMenu()) return;
+    actPop = el("div", "npop mmenu");
+    actPop.setAttribute("role", "menu");
+    for (const it of items) {
+      const b = el("button", "", it.label);
+      b.setAttribute("role", "menuitem");
+      b.onclick = () => (closeActMenu(), it.run());
+      actPop.append(b);
+    }
+    root.append(actPop);
+    const r = anchor.getBoundingClientRect(), m = actPop.getBoundingClientRect();
+    actPop.style.left = clamp(r.right - m.width, 8, innerWidth - m.width - 8) + "px";
+    actPop.style.top = (r.bottom + 6 + m.height < innerHeight ? r.bottom + 6 : Math.max(8, r.top - m.height - 6)) + "px";
+    actPop.querySelector("button").focus();
+    actPop.addEventListener("keydown", (e) => {
+      const bs = [...actPop.querySelectorAll("button")], i = bs.indexOf(root.activeElement);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        bs[(i + (e.key === "ArrowDown" ? 1 : -1) + bs.length) % bs.length].focus();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeActMenu();
+        anchor.focus();
+      }
+    });
+  }
+  window.addEventListener("mousedown", (e) => actPop && !e.composedPath().includes(actPop) && !e.composedPath().some((x) => x && x.dataset && x.dataset.menuBtn) && closeActMenu(), true);
+  function downloadText(name, text) {
+    return saveFileAs(safeName(name, "export"), "txt", "text/plain", "Text file", () => new Blob([text.endsWith("\n") ? text : text + "\n"], { type: "text/plain" }));
+  }
+  // the fretboard as text: one line per string, high to low, the notes (or intervals) at their frets
+  function neckText(tuning, info, notes, labels, fmax, capo) {
+    const n = tuning.midi.length, names = tuning.strings.slice().reverse();
+    const at = new Map(notes.map((x) => [`${x.s}:${x.f}`, x]));
+    const lab = (x) => {
+      const nn = info.byPc.get(((x.p % 12) + 12) % 12);
+      return labels === "intervals" ? NL.pretty(nn.interval) : labels === "none" ? "●" : NL.pretty(nn.name);
+    };
+    const cell = (t, w) => { const l = [...t].length; const a = Math.floor((w - l) / 2); return "-".repeat(Math.max(0, a)) + t + "-".repeat(Math.max(0, w - l - a)); };
+    const nw = Math.max(...names.map((x) => x.length));
+    const head = " ".repeat(nw + 4) + Array.from({ length: fmax }, (_, i) => String(i + 1).padStart(3).padEnd(4)).join("");
+    const lines = [head];
+    for (let s = n - 1; s >= 0; s--) {
+      const o = at.get(`${s}:0`);
+      let l = names[s].padEnd(nw) + " " + (o ? lab(o).padEnd(2) : "  ") + "‖";
+      for (let f = 1; f <= fmax; f++) {
+        const x = at.get(`${s}:${f}`);
+        l += cell(x ? lab(x) : f === capo ? "C" : "", 3) + "|";
+      }
+      lines.push(l);
+    }
+    if (capo) lines.push(`(capo at fret ${capo})`);
+    return lines.join("\n");
+  }
   const setActive = (grp, v) => root.querySelectorAll(`#${grp} button`).forEach((b) => b.classList.toggle("active", (b.dataset.v ?? b.dataset.f) === v));
   function renderScales() {
     const c = SC();
@@ -5858,10 +6241,11 @@
     setActive("scInstr", c.instr);
     setActive("scLabels", c.labels);
     const tsel = $("scTuning");
-    if (tsel.dataset.instr !== c.instr) {
-      tsel.dataset.instr = c.instr;
-      tsel.innerHTML = "";
-      NL.TUNINGS.filter((t) => t.instr === c.instr).forEach((t) => tsel.append(new Option(t.name.replace(/^(Guitar|Bass): /, ""), t.id)));
+    const tkey = c.instr + "|" + (tuning.id === "custom" ? tuning.name : "");
+    if (tsel.dataset.instr !== tkey) {
+      tsel.dataset.instr = tkey;
+      const list = NL.TUNINGS.filter((t) => t.instr === c.instr);
+      fillTunings(tsel, tuning.id === "custom" ? [tuning, ...list] : list, null, true);
     }
     tsel.value = tuning.id;
     $("scRoot").value = c.root;
@@ -5938,19 +6322,53 @@
     const listed = usedPc ? info.notes.filter((nn) => usedPc.has(nn.pc)) : info.notes;
     listed.forEach((nn) => chips.append(el("span", nn.semi === 0 ? "r" : "", NL.pretty(nn.name))));
     $("scFormula").textContent = listed.map((nn) => NL.pretty(nn.interval).padEnd(4)).join("");
+    renderScaleKey(info, cells ? null : scale);
     // tab: each pattern you picked, one after the other (the whole neck only when you've picked some strings)
     const allOn = on.every(Boolean);
     const tabParts = parts.filter((p) => p.notes.length && !(p.all && allOn));
+    // each pattern starts its own line, three measures to a line
     let tabModel = null;
+    const breaks = [], labels = {};
     tabParts.forEach((p) => {
       const t = NL.patternTab(p, tuning.strings, false, 8, !!(p.byString || p.all));
+      const at = tabModel ? tabModel.measures.length : 0;
+      breaks.push(at);
+      labels[at] = p.label.charAt(0).toUpperCase() + p.label.slice(1);
       if (!tabModel) tabModel = t;
       else tabModel.measures.push(...t.measures);
     });
+    if (tabModel) {
+      tabModel.perLine = 3;
+      tabModel.breaks = breaks;
+      if (tabParts.length > 1) tabModel.labels = labels; // name each pattern when there's more than one
+    }
     $("scTab").innerHTML = tabModel ? NL.staffHtml(tabModel) : "";
     const pattern = { notes: shown, tab: tabModel, label: tabParts.map((p) => p.label).join(", "), capo };
     scView = { tuning, scale, info, pattern };
   }
+  // the key signature the scale is written in, beside the pattern rows
+  function renderScaleKey(info, scale) {
+    const box = $("scKey");
+    if (!scale || !info || !info.notes || !info.notes.length) return (box.innerHTML = "");
+    const k = NL.scaleKeySignature(info);
+    const key = `${NL.pretty(k.root)} ${k.minor ? "minor" : "major"}`;
+    const acc = k.count ? `<span>${NL.esc(`${k.count}${k.type === "sharps" ? "♯" : "♭"} · ${k.accidentals.map(NL.pretty).join(" ")}`)}</span>` : ""; // no sharps or flats: nothing to say
+    box.innerHTML = NL.keySignatureImg(k.root, k.minor).replace(/ contenteditable="false"/, "") + `<div class="sk-t"><span>Key signature</span><b>${NL.esc(key)}</b>${acc}</div>`;
+    box.title = k.parent ? `${NL.pretty(info.notes[0].name)} ${scale.name} uses the key signature of ${key}` : `Key signature: ${key}`;
+  }
+  // hide or show the list on the left (Scales, Chords and Tabs); the window gets narrower without it
+  function renderScSide() {
+    const off = !!SC().sideHidden;
+    root.querySelector(".modal.scalemod").classList.toggle("noside", off);
+    $("scSideBtn").classList.toggle("sbon", off);
+    $("scSideBtn").title = off ? "Show the List" : "Hide the List";
+    $("scSideBtn").setAttribute("aria-pressed", String(off));
+  }
+  $("scSideBtn").onclick = () => {
+    SC().sideHidden = !SC().sideHidden;
+    persist();
+    renderScSide();
+  };
   // one root shared by Scales, CAGED and the circle of fifths: choosing it on one screen sets the others
   const rootPcOf = (r) => NL.scaleInfo(r, NL.SCALES[0]).rootPc;
   function scSet(patch) {
@@ -5986,6 +6404,8 @@
     const c = SC();
     const tab = ["scales", "chords", "circle", "caged", "tabs"].includes(c.tab) ? c.tab : "scales";
     root.querySelectorAll("#scTabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    $("scSideBtn").classList.toggle("nolist", tab === "circle" || tab === "caged"); // those have no list to hide
+    root.querySelector(".modal.scalemod").classList.toggle("narrow", tab === "circle" || tab === "caged");
     $("scPaneScales").classList.toggle("show", tab === "scales");
     $("scPaneCircle").classList.toggle("show", tab === "circle");
     $("scPaneCaged").classList.toggle("show", tab === "caged");
@@ -5997,10 +6417,10 @@
     else if (tab === "circle") renderCircle();
     else renderCaged();
     $("scInfo").textContent = "";
-    const blocked = !notesOpen() ? "Open the editor for a video first" : tab === "scales" && !(scView && scView.pattern.tab) ? "Pick a pattern, or some strings, to insert it" : tab === "chords" && !(chView && chView.shapes.length) ? "Pick a chord first" : tab === "tabs" && !tbSel() ? "Pick a tab first" : "";
-    $("scInsert").disabled = !!blocked;
+    // always clickable: with the editor closed it opens this video's page and adds it at the end
+    $("scInsert").disabled = false;
     $("scInsMenu").hidden = true;
-    $("scInsert").title = blocked ? "Unavailable" : "Insert";
+    $("scInsert").title = notesOpen() ? "Insert into the editor" : "Insert at the end of this video's page in the editor";
   }
   root.querySelectorAll("#scaleModal [data-tr]").forEach((b) =>
     b.addEventListener("click", () => {
@@ -6021,6 +6441,8 @@
     return c.chord;
   };
   let chView = null; // { name, shapes: [{ frets, fingers, mine? }], key }
+  // the chords' instrument: standard guitar (where your own shapes live), 7-string or bass
+  const chTuning = () => NL.TUNINGS.find((t) => t.id === CH().tuning && t.instr !== "uke") || NL.TUNINGS[0];
   const myChordNames = () => Object.keys(chordShapesMap).filter((n) => !NL.parseChord(n)).sort((a, b) => a.localeCompare(b));
   function chordShapesFor(name) {
     const key = NL.chordKey(name);
@@ -6099,9 +6521,16 @@
     renderChordList();
     const name = ch.my && chordShapesMap[ch.my] ? ch.my : c.root + ch.type;
     if (ch.my && !chordShapesMap[ch.my]) ch.my = null;
-    const shapes = ch.my ? [{ ...chordShapesMap[ch.my], mine: true }] : chordShapesFor(name);
+    const tn = chTuning(), std = tn.id === "std";
+    const low = tn.midi.slice().reverse();
+    if (!$("chTuning").options.length) fillTunings($("chTuning"), NL.TUNINGS.filter((t) => t.instr !== "uke"));
+    $("chTuning").value = tn.id;
+    setActive("chView", ch.view === "text" ? "text" : "diagram");
+    const shapes = ch.my ? [{ ...chordShapesMap[ch.my], mine: true }] : std ? chordShapesFor(name) : NL.chordVoicings(name, 12, low);
     ch.pick = clamp(ch.pick || 0, 0, Math.max(0, shapes.length - 1));
-    chView = { name, shapes, key: ch.my || NL.chordKey(name) };
+    chView = { name, shapes, key: ch.my || NL.chordKey(name), std: std || !!ch.my };
+    const asText = ch.view === "text";
+    const shLow = ch.my ? undefined : low, shNames = ch.my ? NL.TUNINGS[0].strings : tn.strings;
     const info = NL.chordInfo(name);
     const t = !ch.my && NL.CHORD_TYPES.find((x) => x.s === ch.type);
     $("chName").textContent = ch.my ? NL.pretty(name) : `${NL.pretty(name)}  ·  ${NL.pretty(c.root)} ${t ? t.name.toLowerCase() : ""}`;
@@ -6110,7 +6539,11 @@
       ? shapes
           .map(
             (sh, i) =>
-              `<div class="chcard${i === ch.pick ? " on" : ""}" data-i="${i}" role="button" tabindex="0" title="${sh.mine ? "Yours" : "Choose"}">${NL.chordDiagramSvg(name, notesOpen() ? withCapo(sh) : sh, { rootPc: NL.chordRootPc(name), width: 104 })}<span class="chlab">${sh.mine ? "Yours" : i === (shapes[0].mine ? 1 : 0) ? "Usual" : ""}</span><button class="chpen" data-edit="${i}" title="Edit">${ICON.edit}</button></div>`
+              `<div class="chcard${i === ch.pick ? " on" : ""}" data-i="${i}" role="button" tabindex="0" title="${sh.mine ? "Yours" : "Choose"}">${
+                asText
+                  ? `<pre class="chtext">${NL.esc(NL.chordText(name, notesOpen() && chView.std ? withCapo(sh) : sh, shNames))}</pre>`
+                  : NL.chordDiagramSvg(name, notesOpen() && chView.std ? withCapo(sh) : sh, { rootPc: NL.chordRootPc(name), width: 104, low: shLow })
+              }<span class="chlab">${sh.mine ? "Yours" : i === (shapes[0].mine ? 1 : 0) ? "Usual" : ""}</span>${chView.std ? `<button class="chpen" data-edit="${i}" title="Edit">${ICON.edit}</button>` : ""}</div>`
           )
           .join("")
       : `<div class="none">No shape found for this chord.</div>`;
@@ -6139,6 +6572,18 @@
     if (e.key !== "Enter") return;
     e.preventDefault();
     $("chList").querySelector("button")?.click();
+  });
+  $("chTuning").addEventListener("change", (e) => {
+    Object.assign(CH(), { tuning: e.target.value, pick: 0 });
+    persist();
+    renderChords();
+  });
+  $("chView").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (!b) return;
+    CH().view = b.dataset.v;
+    persist();
+    renderChords();
   });
   $("chRoot").addEventListener("change", (e) => {
     CH().my = null;
@@ -6518,6 +6963,36 @@
     scSet({ strings: null });
   });
   $("scRoot").addEventListener("change", (e) => scSet({ root: e.target.value }));
+  // click a string's letter beside the fretboard to tune that string (your own tuning; the tab follows)
+  $("scNeck").addEventListener("click", (e) => {
+    const nm = e.target.closest(".nk-name");
+    if (!nm) return;
+    const t = scTuning(), n = t.midi.length, s = +nm.getAttribute("data-s"), hi = n - 1 - s;
+    const cur = t.midi[hi];
+    if (closeActMenu()) return;
+    actPop = el("div", "npop tunepop");
+    for (let m = cur - 7; m <= cur + 7; m++) {
+      const b = el("button", m === cur ? "on" : "", NL.midiName(m));
+      b.onclick = () => {
+        closeActMenu();
+        const c = SC();
+        const strings = t.strings.slice(), midi = t.midi.slice();
+        midi[hi] = m;
+        let name = NL.midiName(m).replace(/-?\d+$/, "");
+        strings[hi] = c.instr === "guitar" && hi === 0 ? name.toLowerCase() : name;
+        const same = NL.TUNINGS.find((x) => x.instr === c.instr && x.midi.join() === midi.join());
+        c.customTun = { ...(c.customTun || {}), [c.instr]: { strings, midi } };
+        c.tuning = { ...c.tuning, [c.instr]: same ? same.id : "custom" };
+        scSet({});
+      };
+      actPop.append(b);
+    }
+    root.append(actPop);
+    const r = nm.getBoundingClientRect(), mm = actPop.getBoundingClientRect();
+    actPop.style.left = clamp(r.right + 6, 8, innerWidth - mm.width - 8) + "px";
+    actPop.style.top = clamp(r.top - mm.height / 2, 8, innerHeight - mm.height - 8) + "px";
+    actPop.querySelector("button.on").focus();
+  });
   $("scLabels").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-v]");
     if (b) scSet({ labels: b.dataset.v });
@@ -6578,8 +7053,23 @@
     scSet({ views: [ORDER[(cur + d + ORDER.length) % ORDER.length]] });
   }, true);
   // Insert into Editor opens a little menu: As Text or As Image
+  // why there's nothing to insert yet (empty when there is)
+  function scInsertBlocked() {
+    const tab = SC().tab;
+    if (!notesOpen() && !state.videoId) return "Open a video first: what you insert goes into its page in the editor";
+    if (tab === "chords") return chView && chView.shapes.length ? "" : "Pick a chord first";
+    if (tab === "tabs") return tbSel() ? "" : "Pick a tab first";
+    if (tab === "circle" || tab === "caged") return "";
+    return scView && scView.pattern.tab ? "" : "Pick a pattern, or some strings, to insert it";
+  }
   $("scInsert").onclick = (e) => {
     e.stopPropagation();
+    const why = scInsertBlocked();
+    if (why) {
+      $("scInsMenu").hidden = true;
+      $("scInfo").textContent = why;
+      return flash(why);
+    }
     const m = $("scInsMenu");
     m.hidden = !m.hidden;
     if (!m.hidden) m.querySelector("button").focus();
@@ -6618,8 +7108,23 @@
     saveNotesNow();
     renderPreview();
   }
-  function scInsert(asImage) {
+  // the editor isn't open (Chords, Scales or Tabs from the main panel), or you haven't put the cursor anywhere
+  // in it yet: open this video's page and add it at the end
+  let notesCaretSet = false;
+  for (const ev of ["mouseup", "keyup"]) $("notesText").addEventListener(ev, () => (notesCaretSet = true));
+  async function scInsert(asImage) {
+    let atEnd = !notesCaretSet;
+    if (!notesOpen()) {
+      if (!state.videoId) return flash("Open a video first");
+      openNotes(state.videoId);
+      atEnd = true;
+    }
     if (!notesOpen()) return;
+    await new Promise((r) => setTimeout(r, 0)); // let the editor finish opening (it places the cursor)
+    if (atEnd) {
+      const n = notesTa.value.replace(/\s+$/, "").length;
+      notesTa.setSelectionRange(n, n);
+    }
     const P = NL.pretty;
     if (SC().tab === "tabs") {
       const t = tbSel();
@@ -6635,7 +7140,7 @@
     if (SC().tab === "chords") {
       const sh = chView && chView.shapes[CH().pick];
       if (!sh) return;
-      if (!sh.mine && CH().pick > 0 && !CH().my) chordShapesMap[chView.key] = { frets: sh.frets.slice(), fingers: (sh.fingers || NL.autoFingers(sh.frets)).slice() };
+      if (chView.std && !sh.mine && CH().pick > 0 && !CH().my) chordShapesMap[chView.key] = { frets: sh.frets.slice(), fingers: (sh.fingers || NL.autoFingers(sh.frets)).slice() };
       saveChordShapes();
       if (asImage) {
         const svg = $("chShapes").querySelector(".chcard.on svg") || $("chShapes").querySelector("svg");
@@ -6655,7 +7160,7 @@
       closeScales();
       insertRuled(text);
       renderPreview();
-      return flash(circle ? "Key added to the editor" : "CAGED shapes added to the editor");
+      return;
     }
     if (!scView || !scView.pattern.tab) return;
     const { tuning, scale, info, pattern } = scView;
@@ -6677,7 +7182,6 @@
     closeScales();
     insertRuled(line + "\n\n" + tab);
     renderPreview();
-    flash("Scale added to the editor");
   }
   // lines of text (a tab) as a picture, in a fixed-width font on white
   function textPicture(lines, scale = 2) {
@@ -6728,8 +7232,39 @@
     return svgToPng(new XMLSerializer().serializeToString(clone), w, h, scale);
   }
   $("scClose").onclick = closeScales;
-  $("scPdf").onclick = printScalesPdf;
-  $("scPrint").onclick = printScalesPdf;
+  $("scExport").onclick = () =>
+    openActMenu($("scExport"), [
+      { label: "PDF", run: printScalesPdf },
+      { label: "Print", run: printScalesPdf },
+      { label: "Text File", run: () => { const t = libText(); if (t) downloadText(t.name, t.text); } },
+    ]);
+  // what's on screen in Chords, Scales, and Tabs, as text (chord shapes and the fretboard drawn in letters)
+  function libText() {
+    const c = SC(), P = NL.pretty;
+    const tab = ["scales", "chords", "circle", "caged", "tabs"].includes(c.tab) ? c.tab : "scales";
+    if (tab === "tabs") {
+      const t = tbSel();
+      return t && { name: t.name, text: savedTabText(t) };
+    }
+    if (tab === "chords") {
+      if (!chView) return null;
+      const tn = chTuning();
+      const blocks = chView.shapes.map((sh) => NL.chordText(chView.name, sh, tn.strings));
+      return { name: chView.name, text: [`${P(chView.name)}`, $("chNotes").textContent, tn.id !== "std" ? tn.name : "", "", NL.sideBySide(blocks)].filter((x, i) => x || i === 3).join("\n") };
+    }
+    if (tab === "scales") {
+      if (!scView) return null;
+      const { tuning, scale, info, pattern } = scView;
+      const title = `${P(c.root)} ${scale.name}`;
+      const fmax = Math.max(12, ...pattern.notes.map((x) => x.f + 1));
+      const lines = [title, `${tuning.name}${pattern.capo ? `, capo ${pattern.capo}` : ""}`, `Notes: ${info.notes.map((nn) => P(nn.name)).join(" ")}`, `Intervals: ${info.notes.map((nn) => P(nn.interval)).join(" ")}`, ""];
+      lines.push(neckText(tuning, info, pattern.notes.map((x) => ({ ...x, f: x.f + (pattern.capo || 0) })), c.labels, Math.min(24, fmax + (pattern.capo || 0)), pattern.capo || 0));
+      if (pattern.tab) lines.push("", NL.formatTab(pattern.tab));
+      return { name: title, text: lines.join("\n") };
+    }
+    if (tab === "caged") return { name: "CAGED", text: insertCaged() };
+    return { name: "Circle of Fifths", text: insertKey() };
+  }
   $("scDone").onclick = closeScales;
   $("scaleModal").addEventListener("click", (e) => {
     if (e.target === $("scaleModal")) closeScales();
@@ -7089,7 +7624,6 @@
       const title = lkVid === state.videoId ? videoTitle() : "YouTube video";
       v = { id: newId(), videoId: lkVid, title, name: title, desc: "", createdAt: now, updatedAt: now, loops: [], links: [] };
       library = [v, ...library];
-      flash("Video saved");
     }
     v.links = v.links || [];
     const k = lkEdit && v.links.find((x) => x.id === lkEdit);
@@ -7112,7 +7646,7 @@
     if (NL) NL.setCustomChords(chordShapesMap);
   };
   // a new page: just the video's title
-  const exampleSong = (title) => `${title}\n\n`;
+  const exampleSong = (title) => `# ${title}\n\n`;
   // older pages: a ```song block or [chords] in the words are shown with the chords on their own line
   function asSongText(t) {
     if (!NL || !t) return t;
@@ -7191,12 +7725,15 @@
     root.querySelectorAll("#edChFilter button").forEach((b) => b.classList.toggle("active", b.dataset.f === show));
     if (!q.trim() && show !== "mine") return;
     const have = new Set([...NL.sheetChords(notesTa.value), ...sideChords()]);
-    const sug = chordSuggestions(q, show);
-    if (!sug.length) return box.append(el("span", "none", show === "mine" && !q.trim() ? "No custom chords yet." : "No chord matches that."));
+    const all = chordSuggestions(q, show), sug = all.filter((c) => !have.has(c)); // already in the library: not offered again
+    if (!sug.length)
+      return box.append(
+        el("span", "none", all.length ? (q.trim() ? "Already in the library." : "All your own chords are in the library.") : show === "mine" && !q.trim() ? (myChordNames().length ? "All your own chords are in the library." : "No custom chords yet.") : "No chord matches that.")
+      );
     for (const c of sug) {
-      const b = el("button", have.has(c) ? "on" : "", NL.pretty(c));
+      const b = el("button", "", NL.pretty(c));
       b.dataset.add = c;
-      b.title = have.has(c) ? "Added" : "Add";
+      b.title = "Add";
       box.append(b);
     }
   }
@@ -7214,6 +7751,7 @@
     state.settings.sideChFilter = b.dataset.f;
     persist();
     renderChordSug();
+    renderPreview();
   });
   $("edChSearch").addEventListener("keydown", (e) => {
     e.stopPropagation(); // typing here isn't a shortcut
@@ -7233,6 +7771,13 @@
     if (b) addSideChord(b.dataset.add);
   });
   $("edShapes").addEventListener("click", (e) => {
+    const sa = e.target.closest("button[data-f]");
+    if (sa) {
+      state.settings.sideChFilter = sa.dataset.f;
+      persist();
+      renderChordSug();
+      return renderPreview();
+    }
     const rm = e.target.closest("[data-rm]");
     if (rm) {
       e.stopPropagation();
@@ -7242,10 +7787,34 @@
     const c = d && d.dataset.chord;
     if (c) openShapeEditor(c, !NL.parseChord(c) && chordShapesMap[c] ? { any: true, mine: true } : {});
   });
-  $("edShapesOn").addEventListener("change", (e) => {
-    state.settings.songShapes = e.target.checked;
+  // Chord Shapes on the right: shown or hidden. Hiding it hides the whole side and makes the window narrower,
+  // so more of the video shows; showing it again widens the window by the same amount.
+  let lastSideW = 0;
+  function renderShapesBtn() {
+    const on = state.settings.songShapes !== false;
+    $("notesWin").classList.toggle("noside", !on);
+    const b = $("edShapesOn");
+    b.classList.toggle("off", !on);
+    b.title = on ? "Hide Chord Shapes" : "Show Chord Shapes";
+    b.setAttribute("aria-pressed", String(on));
+    b.setAttribute("aria-label", b.title);
+  }
+  $("edShapesOn").addEventListener("mousedown", (e) => e.preventDefault());
+  $("edShapesOn").addEventListener("click", () => {
+    const w = $("notesWin"), on = state.settings.songShapes !== false;
+    const r = w.getBoundingClientRect();
+    const sideW = on ? (lastSideW = $("edSide").getBoundingClientRect().width) : lastSideW || 250;
+    state.settings.songShapes = !on;
+    renderShapesBtn();
+    let W = on ? Math.max(420, r.width - sideW) : Math.min(r.width + sideW, innerWidth - 8);
+    if (!on && r.left + W > innerWidth - 4) w.style.left = Math.max(4, innerWidth - 4 - W) + "px"; // keep it on screen
+    if (sideW) {
+      w.style.width = Math.round(W) + "px";
+      state.settings.notesSize = { w: Math.round(W), h: Math.round(r.height) };
+    }
     persist();
     renderPreview();
+    sizeInk();
   });
   // pasting a sheet with [chords] in the words puts the chords on their own line above
   notesTa.addEventListener("paste", (e) => {
@@ -7320,7 +7889,7 @@
     o.push("</svg>");
     $("shEdit").innerHTML = o.join("");
     $("shBase").textContent = base;
-    $("shCapo").textContent = capo ? capo : "None";
+    $("shCapo").textContent = capo ? "Capo " + capo : "No Capo";
     if (root.activeElement !== $("shFrets")) $("shFrets").value = fretsText(sh.frets);
   }
   // click a fret: a circle appears; click it again to step the finger 1→5, once more removes it
@@ -7426,7 +7995,6 @@
     const name = sh.name;
     saveChordShapes();
     closeShapeEditor();
-    flash(`${NL.pretty(name)}: standard fingering`);
   };
   $("shSave").onclick = () => {
     if (!sh) return;
@@ -7466,14 +8034,20 @@
     if (!["guitar", "bass"].includes(t.instr)) t.instr = "guitar";
     if (!t.a4 || t.a4 < 430 || t.a4 > 450) t.a4 = 440;
     if (!["listen", "play"].includes(t.mode)) t.mode = "listen";
-    if (!["once", "repeat", "constant"].includes(t.sound)) t.sound = "once";
+    if (!["repeat", "constant"].includes(t.sound)) t.sound = "repeat"; // Pluck (again and again) or a constant tone
     if (!(t.vol >= 0 && t.vol <= 100)) t.vol = 70;
     return t;
   };
   const tu = { ctx: null, stream: null, src: null, an: null, timer: 0, buf: null, hist: [], quietSince: 0, lock: null, ring: null, ringTimer: 0, allTimer: 0, held: null, master: null };
+  // guitar: 6 or 7 strings; bass: 4 or 5
+  const tuCounts = () => (TU().instr === "bass" ? [4, 5] : [6, 7]);
+  const tuList = () => {
+    const t = TU(), counts = tuCounts();
+    const n = counts.includes(t.count) ? t.count : counts[0];
+    return NL.TUNINGS.filter((x) => x.instr === t.instr && x.midi.length === n);
+  };
   const tuTuning = () => {
-    const t = TU();
-    const list = NL.TUNINGS.filter((x) => x.instr === t.instr);
+    const t = TU(), list = tuList();
     return list.find((x) => x.id === t.tuning) || list[0];
   };
   // strings low to high: { name, midi }
@@ -7485,7 +8059,10 @@
     if (!tu.ctx) {
       tu.ctx = new (window.AudioContext || window.webkitAudioContext)();
       tu.master = tu.ctx.createGain(); // the volume slider
-      tu.master.connect(tu.ctx.destination);
+      const lim = tu.ctx.createDynamicsCompressor(); // keeps loud low notes from distorting
+      lim.threshold.value = -6;
+      lim.ratio.value = 12;
+      tu.master.connect(lim).connect(tu.ctx.destination);
     }
     if (tu.ctx.state === "suspended") tu.ctx.resume();
     tu.master.gain.value = Math.pow(TU().vol / 100, 1.6);
@@ -7605,17 +8182,26 @@
     tu.stream = tu.src = tu.an = null;
   }
   // a soft plucked note: a few harmonics that fade away
+  // the mix of overtones for a note: low (bass) notes lean on their overtones, so they sound as loud as guitar notes
+  function tuVoice(f, hold) {
+    const low = f < 165;
+    const amps = low ? [0.75, 1, 0.8, 0.55, 0.36, 0.22, 0.13] : hold ? [1, 0.45, 0.2, 0.08] : [1, 0.55, 0.3, 0.14, 0.07];
+    const sum = amps.reduce((a, b) => a + b, 0);
+    const boost = low ? Math.min(1.9, 1 + (165 - f) / 140) : 1;
+    return { amps, peak: ((hold ? 0.2 : 0.3) * (low ? 2.06 : sum)) / sum * boost, cut: Math.max(hold ? 2200 : 2600, f * 9) };
+  }
   function tuTone(midi) {
     const ctx = tuCtx(), t = ctx.currentTime, f = NL.midiFreq(midi, TU().a4);
+    const vc = tuVoice(f, false);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.3, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(vc.peak, t + 0.015);
     g.gain.exponentialRampToValueAtTime(0.0005, t + 2.6);
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = 2600;
+    lp.frequency.value = vc.cut;
     lp.connect(g).connect(tu.master);
-    [1, 0.55, 0.3, 0.14, 0.07].forEach((amp, i) => {
+    vc.amps.forEach((amp, i) => {
       const o = ctx.createOscillator(), og = ctx.createGain();
       o.type = "sine";
       o.frequency.value = f * (i + 1);
@@ -7628,14 +8214,15 @@
   // a steady note that keeps sounding until it's stopped
   function tuHold(midi) {
     const ctx = tuCtx(), t = ctx.currentTime, f = NL.midiFreq(midi, TU().a4);
+    const vc = tuVoice(f, true);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.2, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(vc.peak, t + 0.08);
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = 2200;
+    lp.frequency.value = vc.cut;
     lp.connect(g).connect(tu.master);
-    const oscs = [1, 0.45, 0.2, 0.08].map((amp, i) => {
+    const oscs = vc.amps.map((amp, i) => {
       const o = ctx.createOscillator(), og = ctx.createGain();
       o.frequency.value = f * (i + 1);
       og.gain.value = amp;
@@ -7692,10 +8279,12 @@
     const t = TU();
     root.querySelectorAll("#tuInstr button").forEach((b) => b.classList.toggle("active", b.dataset.v === t.instr));
     root.querySelectorAll("#tuMode button").forEach((b) => b.classList.toggle("active", b.dataset.v === t.mode));
+    const cnt = $("tuCount");
+    cnt.innerHTML = "";
+    tuCounts().forEach((n) => cnt.append(new Option(`${n} Strings`, String(n))));
+    cnt.value = String(tuTuning().midi.length);
     const sel = $("tuTuning");
-    sel.innerHTML = "";
-    NL.TUNINGS.filter((x) => x.instr === t.instr).forEach((x) => sel.append(new Option(x.name.replace(/^(Guitar|Bass): /, ""), x.id)));
-    sel.value = tuTuning().id;
+    fillTunings(sel, tuList().map((x) => ({ ...x, name: x.name.replace(/(7|5)-String /, "") })), tuTuning().id, true);
     $("tuA4").value = String(t.a4);
     const box = $("tuStrings");
     box.innerHTML = "";
@@ -7748,11 +8337,20 @@
     if (!b || b.dataset.v === TU().instr) return;
     TU().instr = b.dataset.v;
     TU().tuning = null;
+    TU().count = null;
     tu.lock = null;
     persist();
     tuStopListen();
     renderTuner();
     tuSetMode();
+  });
+  $("tuCount").addEventListener("change", (e) => {
+    TU().count = +e.target.value;
+    TU().tuning = null;
+    tu.lock = null;
+    persist();
+    tuStopRing();
+    renderTuner();
   });
   $("tuTuning").addEventListener("change", (e) => {
     TU().tuning = e.target.value;
@@ -7794,20 +8392,6 @@
     if (tu.master) tu.master.gain.value = Math.pow(TU().vol / 100, 1.6);
   });
   $("tuVol").addEventListener("change", () => persist());
-  $("tuAll").onclick = () => {
-    tuStopRing();
-    const strs = tuStrings();
-    let i = 0;
-    const next = () => {
-      if (i >= strs.length || !$("tunerModal").classList.contains("show")) return;
-      tuTone(strs[i].midi);
-      const b = root.querySelector(`#tuStrings button[data-i="${i}"]`);
-      if (b) b.classList.add("ringing"), setTimeout(() => b.classList.remove("ringing"), 800);
-      i++;
-      tu.allTimer = setTimeout(next, 900);
-    };
-    next();
-  };
 
   // ----- theme: System (follows your computer) / Day / Night -----
   const THEMES = ["system", "light", "dark"];
@@ -7838,14 +8422,13 @@
     state.settings.themeChosen = true;
     persist();
     applyTheme();
-    flash(`Theme: ${THEME_NAME[state.settings.theme]}`);
   };
   try {
     darkQuery && darkQuery.addEventListener("change", () => !dead && applyTheme());
   } catch (e) {}
 
   // ----- help -----
-  const HELP_DIMS = { "help-loop.png": [300, 220], "help-loopbar.png": [300, 44], "help-editor.png": [300, 333], "help-metronome.png": [300, 210], "help-saved.png": [300, 212] };
+  const HELP_DIMS = { "help-loop.png": [300, 220], "help-loopbar.png": [300, 37], "help-editor.png": [300, 333], "help-metronome.png": [300, 210], "help-saved.png": [300, 212] };
   const helpImg = (file, alt) => {
     let src = "";
     try {
@@ -7862,7 +8445,7 @@
         <li>Open a YouTube video and click the cat in the toolbar.</li>
         <li>Click <b>Set A</b> where the part starts and <b>Set B</b> where it ends. It starts looping.</li>
         <li>Lower the <b>Speed</b>. The pitch stays the same.</li>
-        <li>Click <b>Save Loop</b> to keep it. The disk button at the top (left of download) saves the video without a loop; it turns green once the video is saved.</li>
+        <li>Click <b>Save Loop</b> to keep it. Saving a loop saves the video too.</li>
       </ol>
 
       <h3>Loops</h3>
@@ -7883,34 +8466,37 @@
       ${helpImg("help-saved.png", "Saved videos")}
       <ul>
         <li>The list button at the top shows your saved videos and their loops. The list next to the search box sorts them: My Order, Newest First, Oldest First, Name A–Z or Z–A.</li>
-        <li>The download button at the top saves everything in one file. <b>Import</b> brings it back.</li>
+        <li><b>Export</b> (the down arrow at the top) saves everything in one .gpyc file (Chrome asks where to save it and what to call it; the .gpyc ending is kept); <b>Import</b> (the up arrow) brings it back.</li>
+        <li>The list next to <b>Save Loop</b> shows the video’s name and its loops. ✎ renames the video: type the name, then press Enter or click the disk to save it (an unsaved video is saved with that name). When the video or its first loop isn’t saved yet, the list has a <b>Save</b> button.</li>
+        <li>A video is only saved when you save it. The disk left of the video’s name saves it (saving a loop saves it too). Once it’s saved, the disk turns into a bin: click it twice to delete the video with its loops, page and links. Writing in the <b>Editor</b> or adding a link also saves the video, so your work isn’t lost.</li>
       </ul>
 
       <h3>Editor</h3>
       <ul>
-        <li><b>Editor</b> (or ${k("N")}) opens a page for the video. A new page starts with the video’s title, with the cursor on the line under it. Put the chords on the line above the words. It saves as you type.</li>
+        <li><b>Editor</b> (or ${k("N")}) opens a page for the video. A new page starts with the video’s title as a heading (H1), with the cursor on the line under it. Put the chords on the line above the words. It saves as you type.</li>
         <li>The top row formats text: font, size, headings, <b>bold</b>, <i>italic</i>, superscript, subscript, text colour, highlight colours, lists, links and tables. With text selected, only that text changes. Font and size with nothing selected change the whole page. The formatting shows as you type. The styles menu also has <b>Upper Case</b> and <b>Lower Case</b> for the selection, or the whole page when nothing is selected (chord lines are left alone). <b>Text Colour</b> with nothing selected colours the whole page; <b>Default Colour</b> takes it off.</li>
         <li><b>＋ → Picture</b> adds an image; you can also paste or drop one into the page. Backspace after it removes it.</li>
         <li>The squiggle button lets you draw on the page with a pencil, pen, old ink pen, marker or chalk, in any colour and size. Smear softens what’s under it; the eraser removes a line. <b>Done</b>, or clicking the chosen tool again, goes back to typing.</li>
-        <li>The <b>Section</b> list adds [Verse], [Chorus] and so on. The <b>↓ ↑</b> arrows (Transpose) move every chord down or up a half step. The buttons after them are <b>Chords</b>, <b>Scales</b>, <b>Tabs</b>, <b>Loops</b>, <b>Links</b>, <b>Guess Lyrics</b> and <b>Guess Key</b>.</li>
-        <li>The <b>Chord Library</b> on the right shows the song’s chords. Type in <b>Add a Chord</b> to add others that aren’t in the words yet (All · Library · Mine filters the choices; Mine lists your own chords); × removes one. They move with the arrows and go into the PDF. Click a chord shape to change it: click a fret to add a finger, click again to number it, and once more to remove it.</li>
-        <li><b>Tabs</b>: click a string and type the fret. Name a tab and <b>Save</b> it to keep it for every video; pick it again from the list, change it or <b>Delete</b> it. <b>Save</b> turns on once the tab has a name and something changed. <b>New Tab</b> starts an empty one; <b>PDF</b> and <b>Print</b> print it; <b>Close</b> leaves without adding anything. Frets go from 0 to 24. <b>Capo</b> shows where the capo sits beside the strings; click string names to leave some strings out (a partial capo). <b>Show</b>: Finger Position (frets), Notes, or both. <b>Insert Tab into Editor</b> adds it with its name and capo.</li>
-        <li><b>Guess Lyrics</b> (the microphone) reads the lyrics from the video’s closed captions or subtitles and adds them at the cursor, one verse after another. Lyrics in capitals are turned into lower case (with a capital at the start of each line). <b>Include Timestamps</b> puts a time like [0:12] at the start of each verse; it’s off unless you turn it on. It checks first: if the video has captions, finding the lyrics is likely; if it has none, it says so. Captions written by people are used first. It’s not perfect: check the words.</li>
-        <li><b>Guess Key</b> (the key) looks at the chords in the page and names the likeliest key, its relative key, other possible keys and, with a capo, the key it sounds in. <b>Insert Key</b> puts a “Key: G Major” line under the title, and <b>Scales</b> then opens in that key.</li>
-        <li><b>Capo</b> (next to the arrows) puts a “Capo 3” line under the title; the chord shapes, the scales and the PDF follow it. Chord shapes show the capo the usual way: a bar in place of the nut with its fret beside it (“3fr”), and the chord shape is played from the capo.</li>
+        <li>The <b>Section</b> list adds [Verse], [Chorus] and so on. The <b>↓ ↑</b> arrows (Transpose) move every chord down or up a half step. The buttons after them are <b>Chords</b>, <b>Scales</b>, <b>Tabs</b>, <b>Loops</b>, <b>Links</b> and <b>Guess</b> (a menu: <b>Lyrics</b> or <b>Key</b>). In a narrow editor these buttons show just their icons.</li>
+        <li>The <b>Chord Library</b> on the right shows the song’s chords. The side-panel button just right of <b>＋</b> (Show / Hide Chord Shapes) shows or hides that whole side; hiding it makes the editor window narrower so more of the video shows, and showing it widens it again. Type in <b>Add a Chord</b> to add others that aren’t in the words yet (All · Library · Mine filters both the choices and the chords already in the library; Mine is your own chords. Chords already in the library aren’t offered again); × removes one. They move with the arrows and go into the PDF. Click a chord shape to change it: click a fret to add a finger, click again to number it, and once more to remove it.</li>
+        <li><b>Tabs</b>: click a string and type the fret. Name a tab and <b>Save</b> it to keep it for every video; pick it again from the list, change it or <b>Delete</b> it. <b>Save</b> turns on once the tab has a name and something changed. <b>New Tab</b> starts an empty one; <b>Export</b> makes a PDF, prints it or saves it as a text file; <b>Close</b> leaves without adding anything. Frets go from 0 to 24. <b>Capo</b> shows where the capo sits beside the strings; click string names to leave some strings out (a partial capo). <b>Show</b>: Finger Position (frets), Notes, or both. <b>Insert Tab into Editor</b> adds it with its name and capo.</li>
+        <li><b>Guess → Lyrics</b> reads the lyrics from the video’s closed captions or subtitles and adds them at the cursor, one verse after another. Lyrics in capitals are turned into lower case (with a capital at the start of each line). <b>Include Timestamps</b> puts a time like [0:12] at the start of each verse; it’s off unless you turn it on. It checks first: if the video has captions, finding the lyrics is likely; if it has none, it says so. Captions written by people are used first. It’s not perfect: check the words.</li>
+        <li><b>Guess → Key</b> looks at the chords in the page and names the likeliest key, its relative key, other possible keys and, with a capo, the key it sounds in. <b>Insert Key</b> puts a “Key: G Major” line under the title, and <b>Scales</b> then opens in that key. A key line near the top shows the start of a score beside it: the treble clef with the key’s sharps or flats (also in the PDF).</li>
+        <li><b>Capo</b> (next to the arrows) puts a “Capo 3” line under the title; the chord shapes, the scales and the PDF follow it. Chord shapes show the capo the usual way: a bar in place of the nut with its fret beside it (“3fr”), and the chord shape is played from the capo. With no capo line it shows <b>No Capo</b>.</li>
+        <li>Point at a chord in the page for a moment and its fingering pops up (with the capo, if there is one).</li>
         <li><b>Loops</b> adds one of your loops to the page. <b>Links</b> keeps links to scores, tabs and lessons (also the link button next to Tabs on the main panel). Click a link’s name or its full address to open it in its own window.</li>
         <li>Ctrl+click (⌘+click on a Mac) a loop, a time or a web address in the page to use it.</li>
-        <li>At the bottom: <b>PDF</b> and <b>Print</b>, <b>Export</b> (a text file with plain words and no formatting, or a PDF or print, with or without chords and links) and <b>Close</b> (or × at the top). The PDF keeps the colours, highlights and drawings.</li>
+        <li>At the bottom: <b>Export</b> (a text file with plain words and no formatting, a PDF or print, with or without chords and links) and <b>Close</b> (or × at the top). The PDF keeps the colours, highlights and drawings.</li>
       </ul>
 
       <h3>Chords, Scales, and Tabs</h3>
       <ul>
-        <li><b>Scales</b>: 51 scales for guitar or bass, in any key and tuning. Red dots are the root.</li>
+        <li><b>Scales</b>: 51 scales for guitar (6 or 7 strings) or bass (4 or 5 strings), in any key and tuning (Standard & Drop, Open and more). Click a string’s letter beside the fretboard to tune that string; the tab follows. In the tab each pattern starts its own line, three measures to a line. Red dots are the root. The key signature the scale is written in shows to the right of the pattern rows (a mode uses its parent key: D Dorian is written like C major). The button left of the Chords tab hides the list on the left (on Chords, Scales and Tabs), which makes the window narrower; click it again to bring the list back.</li>
         <li><b>Customize Scale</b> shows every note of the chosen scale on the neck. Click a note to turn it on or off, or a string name for the whole string; <b>Reset</b> goes back to what was showing. Name it and save it: it’s in the list under My Scales, in any key (All · Library · Mine filters the list). Library scales are never changed. ✎ edits or deletes it.</li>
-        <li><b>Chords</b>: every chord type (major to 13ths) in any key, with several shapes to play each. Type a chord (Am7, Gsus4 …) in the search box to find it. ✎ on a shape changes it and makes it the one your songs show. <b>Customize Chord</b> starts from the chosen shape: change it, give it a one-word name, and use that name in your songs. It starts with the name “Am7__Custom” (for an Am7), keeps the red roots of the chord it came from, and goes into the chord library under My Chords; your song is not changed. All · Library · Mine filters the list. Library chords are never changed.</li>
-        <li><b>Tabs</b> (after Scales; CAGED and Circle of Fifths come next): every tab you saved, for any video. With none saved yet, Tabs goes straight to a new tab. Pick one to see it; <b>Edit</b>, <b>Delete</b>, <b>New Tab</b>, <b>PDF</b>, <b>Print</b>, or <b>Insert into Editor</b>.</li>
+        <li><b>Chords</b>: every chord type (major to 13ths) in any key, with several shapes to play each, on guitar, 7-string guitar or bass (the list next to Root). <b>Diagrams</b> or <b>Text</b> shows the fingerings as pictures or in letters. Type a chord (Am7, Gsus4 …) in the search box to find it. ✎ on a shape changes it and makes it the one your songs show. <b>Customize Chord</b> starts from the chosen shape: change it, give it a one-word name, and use that name in your songs. It starts with the name “Am7__Custom” (for an Am7), keeps the red roots of the chord it came from, and goes into the chord library under My Chords; your song is not changed. All · Library · Mine filters the list. Library chords are never changed.</li>
+        <li><b>Tabs</b> (after Scales; CAGED and Circle of Fifths come next): every tab you saved, for any video. With none saved yet, Tabs goes straight to a new tab. Pick one to see it; <b>Edit</b>, <b>Delete</b>, <b>New Tab</b>, <b>Export</b>, or <b>Insert into Editor</b>.</li>
         <li><b>CAGED</b>: the five shapes of a chord. <b>Circle of Fifths</b>: keys and their chords.</li>
-        <li><b>Insert into Editor ▾</b> adds what you see to the page, <b>As Text</b> (tab, chord name, key) or <b>As Image</b> (a picture of the fretboard, chord shape, tab, CAGED neck or circle). <b>PDF</b> saves it and <b>Print</b> prints it.</li>
+        <li><b>Insert into Editor ▾</b> adds what you see to the page at the cursor (at the end of the page if you haven’t clicked in it, or if the editor isn’t open: it opens this video’s page), <b>As Text</b> (tab, chord name, key) or <b>As Image</b> (a picture of the fretboard, chord shape, tab, CAGED neck or circle). <b>Export</b> makes a PDF, prints it, or saves a text file with the chord shapes and the fretboard drawn in letters.</li>
       </ul>
 
       <h3>Metronome</h3>
@@ -7918,18 +8504,18 @@
       <ul>
         <li><b>Start</b> the click. Set the speed with − and +, the slider or <b>Tap</b>.</li>
         <li><b>Auto BPM</b>: the cat listens to the video and finds the tempo.</li>
-        <li>The metronome starts hidden. The metronome button at the top shows or hides it.</li>
+        <li>The metronome starts hidden. The metronome button at the top shows or hides it. The round arrow beside <b>Metronome</b> folds its controls away (<b>Show</b> / <b>Hide</b>).</li>
       </ul>
 
       <h3>Tuner</h3>
       <ul>
-        <li>The tuning-fork button at the top opens the tuner, for guitar or bass in any tuning, with A4 from 430 to 450 Hz.</li>
-        <li><b>Listen</b> uses your microphone (Chrome asks the first time) and pauses the video. Play a string: the needle and the note show how far off it is; <b>Tune Up</b> or <b>Tune Down</b> until it says <b>In Tune</b>. It finds the string by itself, or click a string to tune only that one.</li>
-        <li><b>Play Tone</b> plays each string’s note when you click it: <b>Pluck Once</b>, <b>Repeat</b> (plucked again and again) or <b>Constant</b> (a steady tone). Click the string again to stop. <b>Play All</b> plays every string, low to high. <b>Volume</b> sets how loud.</li>
+        <li>The tuning-fork button at the top opens the tuner, for guitar (6 or 7 strings) or bass (4 or 5 strings) in any tuning, with A4 from 430 to 450 Hz.</li>
+        <li><b>Microphone</b> listens through your microphone (Chrome asks the first time) and pauses the video. Play a string: the needle and the note show how far off it is; <b>Tune Up</b> or <b>Tune Down</b> until it says <b>In Tune</b>. It finds the string by itself, or click a string to tune only that one.</li>
+        <li><b>Play Tone</b> plays each string’s note when you click it: <b>Pluck</b> (plucked again and again) or <b>Constant</b> (a steady tone). Click the string again to stop. Bass notes play as loud as guitar notes. <b>Volume</b> sets how loud.</li>
       </ul>
 
       <h3>Buttons at the Top</h3>
-      <p>Saved videos · save video · download everything · tuner · metronome · theme · help · close. Under them, next to the time: <b>Editor</b>, <b>Chords</b>, <b>Scales</b>, <b>Tabs</b> and <b>Links</b>. The panel opens at the upper right, beside the video rather than over it; drag the title bar to move it.</p>
+      <p>Saved videos · import · export · tuner · metronome · theme · help · close. Under them, next to the time: <b>Editor</b>, <b>Chords</b>, <b>Scales</b>, <b>Tabs</b> and <b>Links</b>. The panel opens at the upper right, beside the video rather than over it; drag the title bar to move it.</p>
 
       <h3>Keyboard Shortcuts</h3>
       <table>
@@ -7948,6 +8534,7 @@
         <li><b>No panel</b>: click the toolbar icon on a YouTube tab. Just installed or updated? Refresh the tab.</li>
         <li><b>Auto BPM hears nothing</b>: the video has to be playing and not muted.</li>
         <li><b>The tuner hears nothing</b>: allow the microphone for youtube.com (the icon at the right of the address bar), or use <b>Play Tone</b>.</li>
+        <li><b>Start over</b>: <b>Reset to Default…</b> at the bottom of this window. <b>Reset Settings</b> puts the theme, panel, speed, metronome and other choices back and keeps your saved work; <b>Erase Everything</b> also deletes every saved video, loop, page, tab and your own chords and scales (<b>Export First</b> keeps a copy).</li>
       </ul>
 
       <h3>Privacy</h3>
@@ -7968,10 +8555,100 @@
     $("helpModal").classList.remove("show");
   }
   $("helpBtn").onclick = () => ($("helpModal").classList.contains("show") ? closeHelp() : openHelp());
-  $("helpClose").onclick = closeHelp;
+  $("helpClose").onclick = $("helpDone").onclick = closeHelp;
   $("helpModal").addEventListener("click", (e) => {
     if (e.target === $("helpModal")) closeHelp();
   });
+
+  // ----- Reset to Default: put the settings back, or erase everything and start over -----
+  let rsArm = false, rsTimer = null;
+  function openReset() {
+    rsArm = false;
+    renderReset();
+    $("resetModal").classList.add("show");
+    setTimeout(() => $("rsCancel").focus(), 0);
+  }
+  function closeReset() {
+    clearTimeout(rsTimer);
+    rsArm = false;
+    $("resetModal").classList.remove("show");
+  }
+  function renderReset() {
+    const b = $("rsAll");
+    b.textContent = rsArm ? "Click Again to Erase" : "Erase Everything";
+    b.title = rsArm ? "Deletes everything. This can’t be undone" : "Erase Everything";
+  }
+  // close every window and stop what's running, so nothing shows old settings or data
+  function closeEverything() {
+    closeLoopPop();
+    closeExport();
+    closeLinkPop();
+    closeActMenu();
+    if ($("loopModal").classList.contains("show")) closeLoopEditor();
+    if ($("linksModal").classList.contains("show")) closeLinks();
+    if ($("shapeModal").classList.contains("show")) closeShapeEditor();
+    if ($("scEdModal").classList.contains("show")) closeScaleEditor();
+    if ($("lyModal").classList.contains("show")) closeLyricsAsk();
+    if ($("gkModal").classList.contains("show")) closeGuessKey();
+    if ($("tunerModal").classList.contains("show")) closeTuner();
+    if (te) closeTabEditor();
+    if (scOpen()) closeScales();
+    closeNotes();
+    closeLib();
+    closeHelp();
+    closeReset();
+    root.querySelectorAll(".modal-back.show").forEach((m) => m.classList.remove("show"));
+    if (metro.on) stopMetro();
+    stopDetect();
+    state.looping = false;
+    state.loopCount = 0;
+    cancelWait();
+  }
+  function resetSettings() {
+    const hidden = state.settings.hidden;
+    state.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    state.settings.hidden = hidden;
+    if (metro.gain) metro.gain.gain.value = Math.pow(M().vol / 100, 1.5);
+    setSpeed(1);
+    applyTheme();
+    store.set("settings", state.settings);
+    placePanel();
+    render();
+  }
+  $("resetOpen").onclick = openReset;
+  $("rsClose").onclick = $("rsCancel").onclick = closeReset;
+  $("resetModal").addEventListener("click", (e) => e.target === $("resetModal") && closeReset());
+  $("rsExport").onclick = () => exportLibrary();
+  $("rsSettings").onclick = () => {
+    closeEverything();
+    resetSettings();
+    flash("Settings are back to default");
+  };
+  $("rsAll").onclick = async () => {
+    clearTimeout(rsTimer);
+    if (!rsArm) {
+      rsArm = true; // ask once more: this deletes everything
+      rsTimer = setTimeout(() => ((rsArm = false), renderReset()), 4000);
+      return renderReset();
+    }
+    closeEverything();
+    try {
+      await chrome.storage.local.clear();
+    } catch (e) {}
+    library = [];
+    myTabs = [];
+    customScales = [];
+    if (NL) NL.setCustomScales([]);
+    setChordShapes({});
+    state.loopId = null;
+    state.a = state.b = null;
+    state.saved = [];
+    nameEdited = false;
+    expanded.clear();
+    resetSettings();
+    persist();
+    flash("Everything is erased. Starting over");
+  };
   // keep the list in sync when you save from another YouTube tab
   try {
     chrome.storage.onChanged.addListener((ch, area) => {

@@ -346,18 +346,51 @@
   //           pre: "text above the staff", post: "text below", lost: true if text between staves was dropped }
   // col = array of cell strings, one per string ("" = empty)
   // midi: the pitch of each open string (MIDI note number), top line first like the names
+  // tunings, low to high in `low` ("E2 A2 D3 G3 B3 E4"); strings are kept high to low (the top string lower case on guitar)
+  const tun = (id, name, instr, group, low) => {
+    const notes = low.split(" ");
+    const midi = notes.map((n) => {
+      const m = n.match(/^([A-G][#b]?)(-?\d)$/);
+      const pc = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1][0]] + (m[1][1] === "#" ? 1 : m[1][1] === "b" ? -1 : 0);
+      return 12 * (+m[2] + 1) + pc;
+    });
+    const strings = notes.map((n) => n.replace(/-?\d$/, ""));
+    if (instr === "guitar") strings[strings.length - 1] = strings[strings.length - 1].toLowerCase();
+    return { id, name, instr, group, strings: strings.reverse(), midi: midi.reverse() };
+  };
   const TUNINGS = [
-    { id: "std", name: "Guitar: Standard (EADGBE)", strings: ["e", "B", "G", "D", "A", "E"], midi: [64, 59, 55, 50, 45, 40], instr: "guitar" },
-    { id: "dropd", name: "Guitar: Drop D (DADGBE)", strings: ["e", "B", "G", "D", "A", "D"], midi: [64, 59, 55, 50, 45, 38], instr: "guitar" },
-    { id: "half", name: "Guitar: Half step down", strings: ["eb", "Bb", "Gb", "Db", "Ab", "Eb"], midi: [63, 58, 54, 49, 44, 39], instr: "guitar" },
-    { id: "dadgad", name: "Guitar: DADGAD", strings: ["d", "A", "G", "D", "A", "D"], midi: [62, 57, 55, 50, 45, 38], instr: "guitar" },
-    { id: "openg", name: "Guitar: Open G (DGDGBD)", strings: ["d", "B", "G", "D", "G", "D"], midi: [62, 59, 55, 50, 43, 38], instr: "guitar" },
-    { id: "opend", name: "Guitar: Open D (DADF#AD)", strings: ["d", "A", "F#", "D", "A", "D"], midi: [62, 57, 54, 50, 45, 38], instr: "guitar" },
-    { id: "seven", name: "7-string (BEADGBE)", strings: ["e", "B", "G", "D", "A", "E", "B"], midi: [64, 59, 55, 50, 45, 40, 35], instr: "guitar" },
-    { id: "bass4", name: "Bass: 4-string (EADG)", strings: ["G", "D", "A", "E"], midi: [43, 38, 33, 28], instr: "bass" },
-    { id: "bass5", name: "Bass: 5-string (BEADG)", strings: ["G", "D", "A", "E", "B"], midi: [43, 38, 33, 28, 23], instr: "bass" },
-    { id: "bassdropd", name: "Bass: Drop D (DADG)", strings: ["G", "D", "A", "D"], midi: [43, 38, 33, 26], instr: "bass" },
-    { id: "uke", name: "Ukulele (GCEA)", strings: ["A", "E", "C", "G"], midi: [69, 64, 60, 67], instr: "uke" },
+    tun("std", "Guitar: Standard (EADGBE)", "guitar", "Standard & Drop", "E2 A2 D3 G3 B3 E4"),
+    tun("half", "Guitar: Half Step Down", "guitar", "Standard & Drop", "Eb2 Ab2 Db3 Gb3 Bb3 Eb4"),
+    tun("whole", "Guitar: Whole Step Down (DGCFAD)", "guitar", "Standard & Drop", "D2 G2 C3 F3 A3 D4"),
+    tun("dropd", "Guitar: Drop D (DADGBE)", "guitar", "Standard & Drop", "D2 A2 D3 G3 B3 E4"),
+    tun("dropcs", "Guitar: Drop C# (C#G#C#F#A#D#)", "guitar", "Standard & Drop", "C#2 G#2 C#3 F#3 A#3 D#4"),
+    tun("dropc", "Guitar: Drop C (CGCFAD)", "guitar", "Standard & Drop", "C2 G2 C3 F3 A3 D4"),
+    tun("dropb", "Guitar: Drop B (BF#BEG#C#)", "guitar", "Standard & Drop", "B1 F#2 B2 E3 G#3 C#4"),
+    tun("ddropd", "Guitar: Double Drop D (DADGBD)", "guitar", "Standard & Drop", "D2 A2 D3 G3 B3 D4"),
+    tun("openg", "Guitar: Open G (DGDGBD)", "guitar", "Open", "D2 G2 D3 G3 B3 D4"),
+    tun("opend", "Guitar: Open D (DADF#AD)", "guitar", "Open", "D2 A2 D3 F#3 A3 D4"),
+    tun("opene", "Guitar: Open E (EBEG#BE)", "guitar", "Open", "E2 B2 E3 G#3 B3 E4"),
+    tun("opena", "Guitar: Open A (EAEAC#E)", "guitar", "Open", "E2 A2 E3 A3 C#4 E4"),
+    tun("openc", "Guitar: Open C (CGCGCE)", "guitar", "Open", "C2 G2 C3 G3 C4 E4"),
+    tun("openf", "Guitar: Open F (CFCFAF)", "guitar", "Open", "C2 F2 C3 F3 A3 F4"),
+    tun("opendm", "Guitar: Open D Minor (DADFAD)", "guitar", "Open", "D2 A2 D3 F3 A3 D4"),
+    tun("opengm", "Guitar: Open G Minor (DGDGBbD)", "guitar", "Open", "D2 G2 D3 G3 Bb3 D4"),
+    tun("openem", "Guitar: Open E Minor (EBEGBE)", "guitar", "Open", "E2 B2 E3 G3 B3 E4"),
+    tun("openam", "Guitar: Open A Minor (EAEACE)", "guitar", "Open", "E2 A2 E3 A3 C4 E4"),
+    tun("openc6", "Guitar: Open C6 (CACGCE)", "guitar", "Open", "C2 A2 C3 G3 C4 E4"),
+    tun("dadgad", "Guitar: DADGAD", "guitar", "Other", "D2 A2 D3 G3 A3 D4"),
+    tun("cgdgcd", "Guitar: CGDGCD", "guitar", "Other", "C2 G2 D3 G3 C4 D4"),
+    tun("seven", "Guitar: 7-String Standard (BEADGBE)", "guitar", "7-String", "B1 E2 A2 D3 G3 B3 E4"),
+    tun("seven_dropa", "Guitar: 7-String Drop A (AEADGBE)", "guitar", "7-String", "A1 E2 A2 D3 G3 B3 E4"),
+    tun("seven_half", "Guitar: 7-String Half Step Down", "guitar", "7-String", "Bb1 Eb2 Ab2 Db3 Gb3 Bb3 Eb4"),
+    tun("bass4", "Bass: Standard (EADG)", "bass", "4-String", "E1 A1 D2 G2"),
+    tun("bassdropd", "Bass: Drop D (DADG)", "bass", "4-String", "D1 A1 D2 G2"),
+    tun("basshalf", "Bass: Half Step Down", "bass", "4-String", "Eb1 Ab1 Db2 Gb2"),
+    tun("bassdstd", "Bass: D Standard (DGCF)", "bass", "4-String", "D1 G1 C2 F2"),
+    tun("bass5", "Bass: 5-String Standard (BEADG)", "bass", "5-String", "B0 E1 A1 D2 G2"),
+    tun("bass5c", "Bass: 5-String High C (EADGC)", "bass", "5-String", "E1 A1 D2 G2 C3"),
+    tun("bass5dropa", "Bass: 5-String Drop A (AEADG)", "bass", "5-String", "A0 E1 A1 D2 G2"),
+    { id: "uke", name: "Ukulele (GCEA)", strings: ["A", "E", "C", "G"], midi: [69, 64, 60, 67], instr: "uke", group: "Ukulele" },
   ];
   const tuningFor = (names) => TUNINGS.find((t) => t.strings.join(",") === names.join(",")) || null;
   const emptyCol = (n) => Array.from({ length: n }, () => "");
@@ -549,13 +582,24 @@
   }
   const cleanCell = (s) => String(s || "").replace(/[-\s|]/g, "").slice(0, 6);
 
+  // the lines of a tab: [first measure, end) pairs. perLine measures to a line; model.breaks (measure indexes)
+  // also start a new line, so each part (e.g. each scale pattern) begins on its own line
+  function tabSystems(model) {
+    const per = Math.max(1, model.perLine || 4), total = model.measures.length;
+    const starts = [...new Set([0, ...(Array.isArray(model.breaks) ? model.breaks : [])])].filter((b) => b >= 0 && b < total).sort((a, b) => a - b);
+    const out = [];
+    starts.forEach((a, i) => {
+      const end = i + 1 < starts.length ? starts[i + 1] : total;
+      for (let s = a; s < end; s += per) out.push([s, Math.min(end, s + per)]);
+    });
+    return out;
+  }
   function formatTab(model) {
     const n = model.names.length;
     const w = Math.max(...model.names.map((x) => x.length));
-    const per = Math.max(1, model.perLine || 4);
     const systems = [];
-    for (let s = 0; s < model.measures.length; s += per) {
-      const ms = model.measures.slice(s, s + per);
+    for (const [s, e] of tabSystems(model)) {
+      const ms = model.measures.slice(s, e);
       const widths = ms.map((m) => m.map((col) => 1 + Math.max(2, ...col.map((c) => cleanCell(c).length))));
       const lines = [];
       for (let i = 0; i < n; i++) {
@@ -648,12 +692,13 @@
   // a tab drawn as staff lines with fret numbers on them, bars-per-line like the editor
   function staffHtml(model) {
     const n = model.names.length;
-    const per = Math.max(1, model.perLine || 4);
     const o = ['<div class="staff">'];
     if (model.pre) o.push(`<div class="st-txt">${esc(model.pre)}</div>`);
-    for (let s = 0; s < model.measures.length; s += per) {
+    for (const [s, e] of tabSystems(model)) {
+      const lab = model.labels && model.labels[s];
+      if (lab) o.push(`<div class="st-lab">${esc(lab)}</div>`);
       o.push('<div class="st-sys"><div class="st-names">' + model.names.map((x) => `<span>${esc(x)}</span>`).join("") + '</div><div class="st-bars">');
-      model.measures.slice(s, s + per).forEach((m, k) => {
+      model.measures.slice(s, e).forEach((m, k) => {
         o.push(`<div class="st-m"><div class="st-num">${s + k + 1}</div><div class="st-bar" style="grid-template-columns:repeat(${m.length}, auto)">`);
         for (let i = 0; i < n; i++)
           for (const col of m) {
@@ -1022,6 +1067,92 @@
     };
   }
 
+  // ---------- key signature: the start of a score (treble clef + sharps or flats) ----------
+  // sharps (+) or flats (−) for each key as it is usually written; keys that would need double sharps
+  // or double flats (D# major, D♭ minor …) use the key that sounds the same
+  const KEY_SIG = {
+    maj: { C: 0, G: 1, D: 2, A: 3, E: 4, B: 5, "F#": 6, "C#": 7, F: -1, Bb: -2, Eb: -3, Ab: -4, Db: -5, Gb: -6, Cb: -7, "D#": -3, "G#": -4, "A#": -2 },
+    min: { A: 0, E: 1, B: 2, "F#": 3, "C#": 4, "G#": 5, "D#": 6, "A#": 7, D: -1, G: -2, C: -3, F: -4, Bb: -5, Eb: -6, Ab: -7, Db: 4, Gb: 3 },
+  };
+  const SIG_SHARPS = ["F", "C", "G", "D", "A", "E", "B"];
+  // where each accidental sits, in half staff spaces down from the top line (F5)
+  const SIG_SHARP_STEPS = [0, 3, -1, 2, 5, 1, 4];
+  const SIG_FLAT_STEPS = [4, 1, 5, 2, 6, 3, 7];
+  // "Key: G Major", "key: Bbm", "Key - F# minor" … near the top of a page → { root, minor } or null
+  const KEY_LINE_RE = /^\s*key\s*:\s*([A-Ga-g])([#b♯♭]?)\s*(major|minor|maj|min|m)?\b/i;
+  function parseKeyLine(line) {
+    const m = String(line).match(KEY_LINE_RE);
+    if (!m) return null;
+    const root = m[1].toUpperCase() + m[2].replace("♯", "#").replace("♭", "b");
+    if (!ROOTS.includes(root) && root !== "Cb") return null;
+    return { root, minor: /^(minor|min|m)$/i.test(m[3] || "") };
+  }
+  function keySignature(root, minor) {
+    const n = (minor ? KEY_SIG.min : KEY_SIG.maj)[root] ?? 0;
+    const names = n > 0 ? SIG_SHARPS.slice(0, n).map((x) => x + "#") : SIG_SHARPS.slice().reverse().slice(0, -n).map((x) => x + "b");
+    return { count: Math.abs(n), type: n > 0 ? "sharps" : n < 0 ? "flats" : "", accidentals: names };
+  }
+  const TREBLE_CLEF =
+    '<path stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M8.6 44.5 C10.8 46 13.4 44.6 12.9 41.6 L10.2 4.6 C9.9 1.2 12.6 -0.6 13.8 1.6 C15.4 4.6 11.6 10 8.4 13.6 C4.6 17.8 2.4 21.6 2.6 26.6 C2.9 32.4 7.6 35.4 12.2 34.4 C16.4 33.4 17.4 27.6 14 25.6 C11.2 24 7.8 25.8 8.2 29 C8.4 30.6 9.6 31.4 10.8 31.3"/>';
+  // a small picture (SVG text) of the staff's beginning; `color` is the ink
+  function keySignatureSvg(root, minor, color = "#222") {
+    const sig = keySignature(root, minor);
+    const g = 3, top = 12, x0 = 24, dx = 7.5;
+    const W = x0 + sig.count * dx + 14, H = 50;
+    const f = (x) => +x.toFixed(2);
+    const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><g stroke="${color}" fill="none">`];
+    for (let i = 0; i < 5; i++) o.push(`<line x1="0" x2="${W}" y1="${top + i * 2 * g}" y2="${top + i * 2 * g}" stroke-width=".8"/>`);
+    o.push(`<line x1=".4" x2=".4" y1="${top}" y2="${top + 8 * g}" stroke-width=".8"/>`);
+    o.push(`<g transform="translate(3 ${top - 12})">${TREBLE_CLEF}<circle cx="8.4" cy="43.4" r="2.2" fill="${color}" stroke="none"/></g>`);
+    for (let i = 0; i < sig.count; i++) {
+      const x = x0 + i * dx, y = top + (sig.type === "sharps" ? SIG_SHARP_STEPS[i] : SIG_FLAT_STEPS[i]) * g;
+      if (sig.type === "sharps")
+        o.push(
+          `<path d="M${f(x - 1.2)} ${y - 6} V${y + 7} M${f(x + 1.2)} ${y - 7} V${y + 6}" stroke-width=".8"/>`,
+          `<path d="M${x - 3} ${f(y - 1.2)} L${x + 3} ${f(y - 2.8)} M${x - 3} ${f(y + 2.8)} L${x + 3} ${f(y + 1.2)}" stroke-width="1.6"/>`
+        );
+      else
+        o.push(
+          `<path d="M${x - 2} ${y - 9} V${y + 3} C${x + 1} ${y + 1} ${x + 4} ${y - 1} ${x + 3} ${f(y - 2.6)} C${x + 2} ${y - 4} ${f(x - 0.5)} ${f(y - 2.5)} ${x - 2} ${f(y - 0.8)}" stroke-width="1.1" stroke-linejoin="round"/>`
+        );
+    }
+    o.push("</g></svg>");
+    return o.join("");
+  }
+  // the key signature a scale is written in: a mode uses its parent major key (D Dorian → C major);
+  // other scales use the major or minor key of their root (A minor pentatonic → A minor)
+  function scaleKeySignature(info) {
+    const pcs = new Set(info.notes.map((n) => n.pc));
+    const names = info.notes.map((n) => n.name).join("");
+    const root = info.notes[0].name;
+    if (pcs.size === 7) {
+      const MAJ = [0, 2, 4, 5, 7, 9, 11];
+      const cands = Object.entries(KEY_SIG.maj).filter(([k]) => !["D#", "G#", "A#"].includes(k) && MAJ.every((iv) => pcs.has((parseNote(k).pc + iv) % 12)));
+      if (cands.length) {
+        // spell it the way the scale's notes are spelled (sharps or flats), else the fewest accidentals
+        const want = /#/.test(names) ? 1 : /b/.test(names) ? -1 : 0;
+        cands.sort((a, b) => (want && Math.sign(a[1]) !== want) - (want && Math.sign(b[1]) !== want) || Math.abs(a[1]) - Math.abs(b[1]));
+        const key = cands[0][0];
+        // natural minor (Aeolian): its own minor key, the relative of that major
+        if ((parseNote(key).pc + 9) % 12 === info.rootPc && KEY_SIG.min[root] != null && KEY_SIG.min[root] === KEY_SIG.maj[key])
+          return { root, minor: true, parent: false, ...keySignature(root, true) };
+        return { root: key, minor: false, parent: parseNote(key).pc !== info.rootPc, ...keySignature(key, false) };
+      }
+    }
+    const semis = new Set(info.notes.map((n) => n.semi));
+    const minor = semis.has(3) && !semis.has(4);
+    const r = (minor ? KEY_SIG.min : KEY_SIG.maj)[root] != null ? root : ROOTS.find((x) => parseNote(x).pc === info.rootPc) || "C";
+    return { root: r, minor, parent: false, ...keySignature(r, minor) };
+  }
+  // the same as an <img> (it adds no text, so the editor's text positions don't change)
+  function keySignatureImg(root, minor) {
+    const sig = keySignature(root, minor);
+    const what = sig.count ? `${sig.count} ${sig.count === 1 ? sig.type.slice(0, -1) : sig.type} (${sig.accidentals.map(pretty).join(" ")})` : "no sharps or flats";
+    const label = `Key signature: ${pretty(root)} ${minor ? "minor" : "major"}, ${what}`;
+    const src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(keySignatureSvg(root, minor));
+    return `<img class="keysig" src="${src}" alt="${esc(label)}" title="${esc(label)}" contenteditable="false" draggable="false">`;
+  }
+
   // ---------- CAGED: the five open chord shapes, moved up the neck ----------
   // frets are for the strings from low E to high e (null = not played), in the open-chord key `root`.
   const CAGED = {
@@ -1238,11 +1369,13 @@
   }
   // playable shapes for any chord type, found by trying every 4-fret window on the neck (standard tuning)
   const voicingCache = new Map();
-  function chordVoicings(name, max = 10) {
+  // shapes for a chord on any tuning (low: the open strings' MIDI notes, lowest first; standard guitar by default)
+  function chordVoicings(name, max = 10, low = STD_LOW) {
     const c = parseChord(name);
     const t = c && chordType(c.suffix);
     if (!t) return [];
-    const key = c.root + "|" + t.s + "|" + (c.bass || "");
+    const N = low.length;
+    const key = c.root + "|" + t.s + "|" + (c.bass || "") + "|" + low.join(",");
     if (voicingCache.has(key)) return voicingCache.get(key);
     const rpc = parseNote(c.root).pc;
     const bassPc = c.bass ? parseNote(c.bass).pc : rpc;
@@ -1252,7 +1385,7 @@
     if (c.bass) need.add(bassPc);
     const found = [];
     for (let lo = 0; lo <= 12; lo++) {
-      const opts = STD_LOW.map((open) => {
+      const opts = low.map((open) => {
         const o = [null];
         for (let f = lo === 0 ? 0 : lo; f <= (lo === 0 ? 4 : lo + 3); f++) if (tones.has((open + f) % 12)) o.push(f);
         if (lo > 0 && lo <= 4 && tones.has(open % 12)) o.push(0);
@@ -1260,15 +1393,14 @@
       });
       const cur = [];
       const walk = (s) => {
-        if (s === 6) {
+        if (s === N) {
           const played = cur.map((f, i) => ({ f, i })).filter((x) => x.f != null);
-          if (played.length < Math.min(4, tones.size + 1) && played.length < 3) return;
-          if (played.length < 3) return;
+          if (played.length < Math.min(3, N)) return;
           // no gaps: only the low and the high strings can be left out (one gap allowed in between)
           const first = played[0].i, last = played[played.length - 1].i;
           if (last - first + 1 - played.length > 1) return;
-          if ((STD_LOW[first] + cur[first]) % 12 !== bassPc) return; // the bass note is the root (or the slash note)
-          const pcs = new Set(played.map((x) => (STD_LOW[x.i] + x.f) % 12));
+          if ((low[first] + cur[first]) % 12 !== bassPc) return; // the bass note is the root (or the slash note)
+          const pcs = new Set(played.map((x) => (low[x.i] + x.f) % 12));
           for (const n of need) if (!pcs.has(n)) return;
           const fretted = played.filter((x) => x.f > 0);
           if (fretted.length) {
@@ -1299,17 +1431,17 @@
       .map((frets) => {
         const played = frets.filter((f) => f != null);
         const fr = played.filter((f) => f > 0);
-        const low = fr.length ? Math.min(...fr) : 0;
-        const pcs = new Set(frets.map((f, i) => (f == null ? null : (STD_LOW[i] + f) % 12)).filter((x) => x != null));
-        const score = played.length * 3 + [...tones].filter((p) => pcs.has(p)).length * 2 - low * 0.6 - (frets[5] == null ? 1.5 : 0) - (fr.length ? Math.max(...fr) - low : 0) * 0.5;
-        return { frets, low, score };
+        const pcs = new Set(frets.map((f, i) => (f == null ? null : (low[i] + f) % 12)).filter((x) => x != null));
+        const lo = fr.length ? Math.min(...fr) : 0;
+        const score = played.length * 3 + [...tones].filter((p) => pcs.has(p)).length * 2 - lo * 0.6 - (frets[N - 1] == null ? 1.5 : 0) - (fr.length ? Math.max(...fr) - lo : 0) * 0.5;
+        return { frets, low: lo, score };
       })
       .sort((a, b) => b.score - a.score);
     // the best shape in each part of the neck, then lower on the neck first
     const picked = [];
     for (const v of scored) {
       if (picked.length >= max) break;
-      if (picked.some((p) => Math.abs(p.low - v.low) <= 1 && p.frets.filter((f, i) => f === v.frets[i]).length >= 4)) continue;
+      if (picked.some((p) => Math.abs(p.low - v.low) <= 1 && p.frets.filter((f, i) => f === v.frets[i]).length >= Math.max(3, N - 2))) continue;
       picked.push(v);
     }
     const out = picked.sort((a, b) => a.low - b.low).map((v) => ({ frets: v.frets, fingers: autoFingers(v.frets) }));
@@ -1327,7 +1459,9 @@
 
   // a chord diagram (SVG): strings left to right low E → high e, finger numbers in the dots, barres drawn as a bar
   function chordDiagramSvg(name, shape, opts = {}) {
-    const W = opts.width || 86, sx = (W - 30) / 5, fy = 18, L = 22, T = 34;
+    const ns = shape && shape.frets ? shape.frets.length : 6, low = opts.low || STD_LOW;
+    const W = Math.round((opts.width || 86) * Math.max(1, (ns - 1) / 5)), sx = (W - 30) / Math.max(1, ns - 1), fy = 18, L = 22, T = 34;
+    const span = (ns - 1) * sx, mid = L + span / 2;
     const played = shape ? shape.frets.filter((f) => f != null && f > 0) : [];
     const maxF = played.length ? Math.max(...played) : 0;
     const minF = played.length ? Math.min(...played) : 0;
@@ -1340,21 +1474,21 @@
     const label = String(name).replace(/b(?=\d|$|\/|m|M|s|a|d)/g, "♭").replace(/#/g, "♯");
     // a long name (your own chords) is squeezed to fit
     const fit = label.length * 7.4 > W - 6 ? ` textLength="${W - 8}" lengthAdjust="spacingAndGlyphs"` : "";
-    o.push(`<text class="cd-name" x="${fit ? W / 2 : L + 2.5 * sx}" y="13"${fit}>${esc(label)}</text>`);
+    o.push(`<text class="cd-name" x="${fit ? W / 2 : mid}" y="13"${fit}>${esc(label)}</text>`);
     if (!shape) {
-      o.push(`<text class="cd-mark" x="${L + 2.5 * sx}" y="${T + 30}">?</text></svg>`);
+      o.push(`<text class="cd-mark" x="${mid}" y="${T + 30}">?</text></svg>`);
       return o.join("");
     }
     const capo = capoN;
     // the usual way: the capo is a bar in place of the nut, with its fret beside it ("3fr")
     if (capo) o.push(`<title>Capo at fret ${capo}</title>`);
     if (start === 1 && capo)
-      o.push(`<rect class="cd-capo" x="${L - 4}" y="${T - 5}" width="${5 * sx + 8}" height="5" rx="2"/><text class="cd-capofr" x="${L - 6}" y="${T + 1}">${capo}fr</text>`);
-    else if (capo) o.push(`<text class="cd-capol cd-capob" x="${L + 2.5 * sx}" y="${H - 3}">Capo ${capo}</text>`);
-    else if (start === 1) o.push(`<rect class="cd-nut" x="${L - 1}" y="${T - 3}" width="${5 * sx + 2}" height="3"/>`);
+      o.push(`<rect class="cd-capo" x="${L - 4}" y="${T - 5}" width="${span + 8}" height="5" rx="2"/><text class="cd-capofr" x="${L - 6}" y="${T + 1}">${capo}fr</text>`);
+    else if (capo) o.push(`<text class="cd-capol cd-capob" x="${mid}" y="${H - 3}">Capo ${capo}</text>`);
+    else if (start === 1) o.push(`<rect class="cd-nut" x="${L - 1}" y="${T - 3}" width="${span + 2}" height="3"/>`);
     else o.push(`<text class="cd-fr" x="${L - 11}" y="${T + fy / 2 + 4}">${start}</text>`);
-    for (let r = 0; r <= rows; r++) o.push(`<line class="cd-line" x1="${L}" y1="${T + r * fy}" x2="${L + 5 * sx}" y2="${T + r * fy}"/>`);
-    for (let s = 0; s < 6; s++) o.push(`<line class="cd-line" x1="${L + s * sx}" y1="${T}" x2="${L + s * sx}" y2="${T + rows * fy}"/>`);
+    for (let r = 0; r <= rows; r++) o.push(`<line class="cd-line" x1="${L}" y1="${T + r * fy}" x2="${L + span}" y2="${T + r * fy}"/>`);
+    for (let s = 0; s < ns; s++) o.push(`<line class="cd-line" x1="${L + s * sx}" y1="${T}" x2="${L + s * sx}" y2="${T + rows * fy}"/>`);
     const fingers = shape.fingers || [];
     // barre: one finger holding the same fret on several strings
     const byFinger = {};
@@ -1375,13 +1509,54 @@
       else if (f === 0) o.push(`<circle class="cd-open" cx="${x}" cy="${T - 11}" r="3.6"/>`);
       else {
         const y = T + (f - start + 0.5) * fy;
-        const isRoot = rootPc != null && (STD_LOW[s] + f) % 12 === rootPc;
+        const isRoot = rootPc != null && (low[s] + f) % 12 === rootPc;
         o.push(`<circle class="cd-dot${isRoot ? " root" : ""}" cx="${x}" cy="${y}" r="6.5"/>`);
         if (fingers[s]) o.push(`<text class="cd-fi${isRoot ? " root" : ""}" x="${x}" y="${y + 3.5}">${fingers[s] === 5 ? "T" : fingers[s]}</text>`);
       }
     });
     o.push("</svg>");
     return o.join("");
+  }
+  // a chord shape as text, strings left to right low to high:
+  //   Am
+  //   E A D G B e
+  //   x o       o
+  //   ===========
+  //   | | | | 1 |  1
+  //   | | 2 3 | |  2
+  function chordText(name, shape, names) {
+    if (!shape) return `${name}\n(no shape)`;
+    const ns = shape.frets.length;
+    const nm = (names || TUNINGS[0].strings).slice().reverse().slice(0, ns);
+    const played = shape.frets.filter((f) => f != null && f > 0);
+    const maxF = played.length ? Math.max(...played) : 0, minF = played.length ? Math.min(...played) : 0;
+    const start = shape.base ? shape.base : maxF <= 4 ? 1 : minF;
+    const rows = Math.max(4, maxF - start + 1);
+    const w = (ns - 1) * 2 + 1;
+    const out = [String(name).replace(/#/g, "♯").replace(/b(?=\d|$|\/|m|M|s|a|d)/g, "♭")];
+    out.push(nm.map((x) => x.padEnd(2).slice(0, 2)).join("").trimEnd());
+    out.push(shape.frets.map((f) => (f == null ? "x" : f === 0 ? "o" : " ")).join(" "));
+    const capo = +shape.capo || 0;
+    out.push(start === 1 ? (capo ? `${"=".repeat(w)}  capo ${capo}` : "=".repeat(w)) : "-".repeat(w));
+    const fi = shape.fingers || [];
+    for (let r = 0; r < rows; r++) {
+      const fret = start + r;
+      out.push(shape.frets.map((f, s) => (f === fret ? (fi[s] ? String(fi[s] === 5 ? "T" : fi[s]) : "●") : "|")).join(" ") + `  ${fret}`);
+    }
+    if (capo && start !== 1) out.push(`capo ${capo}`);
+    return out.join("\n");
+  }
+  // text blocks side by side (chord shapes in a row)
+  function sideBySide(blocks, gap = 4, per = 4) {
+    const out = [];
+    for (let i = 0; i < blocks.length; i += per) {
+      const row = blocks.slice(i, i + per).map((b) => b.split("\n"));
+      const wd = row.map((ls) => Math.max(...ls.map((l) => [...l].length)));
+      const h = Math.max(...row.map((ls) => ls.length));
+      for (let y = 0; y < h; y++) out.push(row.map((ls, k) => { const l = ls[y] || ""; return l + " ".repeat(wd[k] - [...l].length); }).join(" ".repeat(gap)).trimEnd());
+      out.push("");
+    }
+    return out.join("\n").trimEnd();
   }
   // the root of a chord; your own chords keep the root of the chord they were made from
   // (a "C#m7__Custom" from C#m7 has C# roots), or the note their name starts with
@@ -1701,12 +1876,36 @@
     }
     return out + esc(src.slice(last));
   }
+  // each chord on a chord line in its own span (the text stays the same), so pointing at it can show its shape
+  const chordTokensHtml = (line) =>
+    String(line)
+      .split(/(\s+)/)
+      .map((t) => {
+        const c = bareChord(t);
+        return t && !/^\s+$/.test(t) && c !== "N.C." && c !== "NC" && isChord(c) ? `<span class="chd" data-chord="${esc(c)}">${esc(t)}</span>` : esc(t);
+      })
+      .join("");
   function liveMarkup(text) {
     const hidden = [];
     const lines = String(text).split("\n");
     let pos = 0, fence = false;
+    let keyShown = false;
     const html = lines
-      .map((line) => {
+      .map((line, idx) => {
+        const out = liveLine(line);
+        // "Key: G Major" near the top: the key signature drawn after it
+        if (!keyShown && !fence && idx < 8) {
+          const k = parseKeyLine(line);
+          if (k) {
+            keyShown = true;
+            return out.replace(/<\/span>$/, keySignatureImg(k.root, k.minor) + "</span>");
+          }
+        }
+        return out;
+      })
+      .join("\n");
+    return { html, hidden };
+    function liveLine(line) {
         const base = pos;
         pos += line.length + 1;
         const ln = (cls, inner) => `<span class="ln${cls ? " " + cls : ""}">${inner}</span>`;
@@ -1725,7 +1924,7 @@
         }
         if (isTabLine(line)) return ln("tab", esc(line));
         if (isSectionLine(line) && !new RegExp(`^\\s*\\[${TIME}`).test(line)) return ln("sec", esc(line));
-        if (isChordLine(line)) return ln("chl", esc(line));
+        if (isChordLine(line)) return ln("chl", chordTokensHtml(line));
         if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
           hidden.push([base, base + line.length, true]);
           return ln("hr", `<span class="mk">${esc(line)}</span>`);
@@ -1756,9 +1955,7 @@
           return ln("li", esc(m[1]) + `<span class="bul dot">${esc(m[2])}</span>` + liveInline(line.slice(i + n), base + i + n, hidden));
         }
         return ln("", liveInline(line, base, hidden));
-      })
-      .join("\n");
-    return { html, hidden };
+    }
   }
   root.__ygcNotesLib = {
     CHORD_TYPES,
@@ -1793,6 +1990,12 @@
     isSectionLine,
     CIRCLE,
     keyInfo,
+    keySignature,
+    keySignatureSvg,
+    keySignatureImg,
+    scaleKeySignature,
+    tabSystems,
+    parseKeyLine,
     diatonicChords,
     cagedShapes,
     SCALES,
@@ -1818,6 +2021,8 @@
     emptyCol,
     cleanCell,
     clampCell,
+    chordText,
+    sideBySide,
     songChords,
     guessKey,
     midiFreq,
